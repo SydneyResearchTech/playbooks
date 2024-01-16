@@ -1,0 +1,89 @@
+- name: microk8s development environment
+  hosts: localhost
+  become: true
+  connection: local
+  vars:
+    dns_domain: fake.sydney.edu.au
+
+  tasks:
+    - name: bind9 install
+      ansible.builtin.apt:
+        cache_valid_time: 86400
+        name:
+          - bind9
+        state: present
+        update_cache: true
+
+    - ansible.builtin.shell:
+        cmd: resolvectl -i{{ ansible_default_ipv4.interface }} dns |sed 's/.*:\s*\([0-9.]*\).*$/\1/'
+      register: bind_forwarders
+
+    - ansible.builtin.stat:
+        path: /etc/bind/tsig-key-{{ dns_domain }}
+      register: tsig_key
+    - name: tsig-keygen
+      ansible.builtin.shell:
+        cmd: tsig-keygen -a hmac-sha256 tsig-key-{{ dns_domain }} >/etc/bind/tsig-key-{{ dns_domain }}
+      when: not tsig_key.stat.exists
+
+    - name: /etc/bind/named.conf.ansible
+      ansible.builtin.copy:
+        content: |
+          include "/etc/bind/tsig-key-{{ dns_domain }}";
+          zone "{{ dns_domain }}" {
+            type master;
+            file "db.{{ dns_domain }}";
+            allow-transfer { key "tsig-key-{{ dns_domain }}"; };
+            update-policy { grant tsig-key-{{ dns_domain }} zonesub ANY; };
+          };
+        dest: /etc/bind/named.conf.ansible
+        #validate: named-checkzone
+      notify:
+        - restart named.service
+
+    - name: /var/cache/bind/db
+      ansible.builtin.copy:
+        content: |
+          $TTL 60
+          @ IN SOA {{ dns_domain }}. root.{{ ansible_fqdn }}. ( 1 60 60 60 60 );
+          @ IN NS {{ ansible_fqdn }}.
+        dest: /var/cache/bind/db.{{ dns_domain }}
+        force: false
+        group: bind
+        mode: 0644
+        owner: bind
+
+    - name: /etc/bind/named.conf.options
+      ansible.builtin.copy:
+        backup: true
+        content: |
+          options {
+            directory "/var/cache/bind";
+            forwarders { {{ bind_forwarders.stdout }}; };
+            forward only;
+            dnssec-validation no;
+            listen-on-v6 { any; };
+            allow-query { 127.0.0.1; ::1; 10/8; 172.16/12; 192.168/16; fe80::/10; };
+          };
+        dest: /etc/bind/named.conf.options
+      notify:
+        - restart named.service
+
+    - name: include named.conf.ansible
+      ansible.builtin.lineinfile:
+        insertafter: include "/etc/bind/named.conf.options";
+        line: include "/etc/bind/named.conf.ansible";
+        path: /etc/bind/named.conf
+      notify:
+        - restart named.service
+
+    - name: enable named.service
+      ansible.builtin.service:
+        name: named.service
+        state: started
+
+  handlers:
+    - name: restart named.service
+      ansible.builtin.service:
+        name: named.service
+        state: restarted
