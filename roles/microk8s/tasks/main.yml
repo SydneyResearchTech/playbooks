@@ -1,0 +1,32 @@
+---
+# tasks file for microk8s
+#- name: microk8s install
+
+- name: microk8s status
+  ansible.builtin.shell:
+    cmd: microk8s status --format short
+  register: microk8s_status
+
+- block:
+  - name: metallb range
+    ansible.builtin.script:
+      cmd: files/metallb-range.py "{{ microk8s_metallb_range }}"
+      executable: "{{ ansible_python.executable }}"
+    register: metallb_range
+  - ansible.builtin.debug:
+      var: metallb_range.stdout
+  when:
+    - "microk8s_enable|select('search','^metallb$')|length>0"
+    - "microk8s_status.stdout_lines|select('search','core/metallb: disabled')|length>0"
+
+- name: microk8s enable
+  ansible.builtin.shell:
+    cmd: |
+      ADDON="{{ item }}"
+      if [[ $ADDON == metallb* ]]; then
+        [[ -z $METALLB ]] || ADDON="${METALLB}"
+      fi
+      microk8s enable ${ADDON}
+  with_items: "{{ microk8s_enable }}"
+  when:
+    - "microk8s_status.stdout_lines|select('search',('core/%s: disabled'|format((item|split(':'))[0])))|length>0"

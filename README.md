@@ -18,6 +18,18 @@ Run playbook with `ansible-pull`
 ansible-pull -U https://github.com/SydneyResearchTech/playbooks.git [playbook.yml ...]
 ```
 
+## Playbooks
+
+| Playbook | Purpose | Notes |
+| -------- | ------- | ----- |
+| microk8s-dev-env.yaml | Kubernetes cluster for development. Incorporating DNS resolution and configuration management, Certificate management, Load balancer and Ingress controller. | Uses include OIDC and other authentication integration work. Symulation of full disparate service. Includes full DNS provider functionality. |
+
+## Roles
+
+| Role | Purpose | Notes |
+| ---- | ------- | ----- |
+| microk8s | Install and configure MicroK8s on a single node. |
+
 # Interum steps until fully automated
 
 ## microk8s external-dns

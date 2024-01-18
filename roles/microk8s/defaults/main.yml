@@ -1,0 +1,4 @@
+---
+# defaults file for microk8s
+microk8s_enable: [cert-manger,dns,ha-cluster,helm3,ingress,metallb,rbac,registry]
+microk8s_metallb_range: "{{ ansible_default_ipv4.network+'/'+ansible_default_ipv4.prefix }}"
