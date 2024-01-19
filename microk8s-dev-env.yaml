@@ -2,121 +2,38 @@
   hosts: localhost
   become: true
   connection: local
-  vars:
-    dns_zone: fake.sydney.edu.au
-    ip_usable_range: "{{ (ansible_default_ipv4.network+'/'+ansible_default_ipv4.prefix) |ansible.utils.usable_range }}"
 
   roles:
     - microk8s
+    - named
 
   tasks:
     - block:
-      - name: bind9 install
-        ansible.builtin.apt:
-          cache_valid_time: 86400
-          name:
-            - bind9
-          state: present
-          update_cache: true
-
-      - name: get upstream dns server(s)
-        ansible.builtin.shell:
-          cmd: resolvectl -i{{ ansible_default_ipv4.interface }} dns |sed 's/.*:\s*\([0-9.]*\).*$/\1/'
-        register: bind_forwarders
-
-      - name: tsig key file exists?
-        ansible.builtin.stat:
-          path: /etc/bind/tsig-key-{{ dns_zone }}
-        register: tsig_key
-      - name: tsig-keygen
-        ansible.builtin.shell:
-          cmd: tsig-keygen -a hmac-sha256 tsig-key-{{ dns_zone }} >/etc/bind/tsig-key-{{ dns_zone }}
-        when: not tsig_key.stat.exists
-
-      - name: /etc/bind/named.conf.ansible
-        ansible.builtin.copy:
-          content: |
-            include "/etc/bind/tsig-key-{{ dns_zone }}";
-            zone "{{ dns_zone }}" {
-              type master;
-              file "db.{{ dns_zone }}";
-              allow-transfer { key "tsig-key-{{ dns_zone }}"; };
-              update-policy { grant tsig-key-{{ dns_zone }} zonesub ANY; };
-            };
-          dest: /etc/bind/named.conf.ansible
-          #validate: named-checkzone
-        notify:
-          - restart named.service
-
-      - name: /var/cache/bind/db
-        ansible.builtin.copy:
-          content: |
-            $TTL 60
-            @ IN SOA {{ dns_zone }}. root.{{ ansible_fqdn }}. ( 1 60 60 60 60 );
-            @ IN NS {{ ansible_fqdn }}.
-          dest: /var/cache/bind/db.{{ dns_zone }}
-          force: false
-          group: bind
-          mode: 0644
-          owner: bind
-
-      - name: /etc/bind/named.conf.options
-        ansible.builtin.copy:
-          backup: true
-          content: |
-            options {
-              directory "/var/cache/bind";
-              forwarders { {{ bind_forwarders.stdout }}; };
-              forward only;
-              dnssec-validation no;
-              listen-on-v6 { any; };
-              allow-query { 127.0.0.1; ::1; 10/8; 172.16/12; 192.168/16; fe80::/10; };
-            };
-          dest: /etc/bind/named.conf.options
-        notify:
-          - restart named.service
-
-      - name: include named.conf.ansible
-        ansible.builtin.lineinfile:
-          insertafter: include "/etc/bind/named.conf.options";
-          line: include "/etc/bind/named.conf.ansible";
-          path: /etc/bind/named.conf
-        notify:
-          - restart named.service
-
-      - name: enable named.service
-        ansible.builtin.service:
-          name: named.service
-          state: started
-
       - name: /etc/resolv.conf is symlink?
         ansible.builtin.stat:
           path: /etc/resolv.conf
         register: resolv_conf
-      tags: [bind,named,resolvd]
 
-    - block:
-      - name: unlink /etc/resolv.conf from systemd-resolved
-        ansible.builtin.command:
-          cmd: unlink /etc/resolv.conf
-      - name: copy /run/systemd/resolve/stub-resolv.conf to /etc/resolv.conf
+      - block:
+        - name: unlink /etc/resolv.conf from systemd-resolved
+          ansible.builtin.command:
+            cmd: unlink /etc/resolv.conf
+
+        - name: copy /run/systemd/resolve/stub-resolv.conf to /etc/resolv.conf
+          ansible.builtin.shell:
+            cmd: sed -n -e '/^#/!p' /run/systemd/resolve/stub-resolv.conf >/etc/resolv.conf
+        when: resolv_conf.stat.islnk
+
+      - name: set nameserver
+        ansible.builtin.lineinfile:
+          line: nameserver {{ ansible_default_ipv4.address }}
+          path: /etc/resolv.conf
+          search_string: nameserver
+
+      - name: microk8s set nameserver
         ansible.builtin.shell:
-          cmd: sed -n -e '/^#/!p' /run/systemd/resolve/stub-resolv.conf >/etc/resolv.conf
-      when: resolv_conf.stat.islnk
-    - name: set nameserver
-      ansible.builtin.lineinfile:
-        line: nameserver {{ ansible_default_ipv4.address }}
-        path: /etc/resolv.conf
-        search_string: nameserver
-    - name: microk8s set nameserver
-      ansible.builtin.shell:
-        cmd: >
-          microk8s kubectl -n kube-system get configmap/coredns -oyaml
-          | sed 's/forward \. .*$/forward . {{ ansible_default_ipv4.address }}/'
-          | microk8s kubectl apply -f -
-
-  handlers:
-    - name: restart named.service
-      ansible.builtin.service:
-        name: named.service
-        state: restarted
+          cmd: >
+            microk8s kubectl -n kube-system get configmap/coredns -oyaml
+            | sed 's/forward \. .*$/forward . {{ ansible_default_ipv4.address }}/'
+            | microk8s kubectl apply -f -
+      tags: [bind,named,resolvd]

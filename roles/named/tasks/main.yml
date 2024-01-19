@@ -1,0 +1,44 @@
+---
+# tasks file for named
+- name: bind9 install
+  ansible.builtin.apt:
+    cache_valid_time: 86400
+    name:
+      - bind9
+    state: present
+    update_cache: true
+
+- name: get upstream dns server(s)
+  ansible.builtin.shell:
+    cmd: resolvectl -i{{ ansible_default_ipv4.interface }} dns |sed 's/.*:\s*\([0-9.]*\).*$/\1/'
+  register: bind_forwarders
+
+- name: zones
+  ansible.builtin.include_tasks: configure_zone.yml
+  vars:
+    dns_zone: "{{ item }}"
+  loop: "{{ named_zones|flatten(levels=1) }}"
+
+- name: named.conf.options
+  ansible.builtin.template:
+    backup: true
+    dest: /etc/bind/named.conf.options
+    lstrip_blocks: true
+    src: named.conf.options.j2
+    #validate: ???
+  notify:
+    - reload named
+
+- name: include named.conf.ansible
+  ansible.builtin.lineinfile:
+    insertafter: include "/etc/bind/named.conf.options";
+    line: include "/etc/bind/named.conf.ansible";
+    path: /etc/bind/named.conf
+  notify:
+    - reload named
+
+- name: enable named.service
+  ansible.builtin.service:
+    name: named.service
+    state: started
+

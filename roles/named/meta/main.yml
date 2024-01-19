@@ -1,7 +1,7 @@
 galaxy_info:
-  author: Dean Taylor
-  description: MicroK8s management
-  company: The University of Sydney
+  author: your name
+  description: your role description
+  company: your company (optional)
 
   # If the issue tracker for your role is not on github, uncomment the
   # next line and provide a value
@@ -39,9 +39,9 @@ galaxy_info:
   #   - 7
   #   - 99.99
   platforms:
-  - name: Ubuntu
-    versions:
-    - 22.04
+    - name: Ubuntu
+      versions:
+        - 22.04
 
   galaxy_tags: []
     # List tags for your role here, one per line. A tag is a keyword that describes

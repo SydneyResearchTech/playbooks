@@ -1,0 +1,11 @@
+---
+# handlers file for named
+- name: restart named
+  ansible.builtin.service:
+    name: named.service
+    state: restarted
+
+- name: reload named
+  ansible.builtin.service:
+    name: named.service
+    state: reloaded
