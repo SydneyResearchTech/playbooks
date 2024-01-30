@@ -30,3 +30,27 @@
   with_items: "{{ microk8s_enable }}"
   when:
     - "microk8s_status.stdout_lines|select('search',('core/%s: disabled'|format((item|split(':'))[0])))|length>0"
+
+- name: local-storage class
+  ansible.builtin.shell:
+    cmd: |
+      cat <<EOT |microk8s kubectl apply -f -
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: local-storage
+      provisioner: kubernetes.io/no-provisioner
+      reclaimPolicy: Delete
+      volumeBindingMode: WaitForFirstConsumer
+      EOT
+
+# https://www.freedesktop.org/software/systemd/man/latest/tmpfiles.d.html
+- name: local-storage tmpfiles.d
+  ansible.builtin.copy:
+    content: |
+      {% for i in microk8s_local_storage %}
+      d {{ i.path }} 1777 root root {{ i.age|default('-',true) }}
+      {% endfor %}
+    dest: /etc/tmpfiles.d/microk8s-local-storage.conf
+  notify:
+    - create tmpfiles

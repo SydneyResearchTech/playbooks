@@ -1,2 +1,5 @@
 ---
 # handlers file for microk8s
+- name: create tmpfiles
+  ansible.builtin.command:
+    cmd: systemd-tmpfiles --create
