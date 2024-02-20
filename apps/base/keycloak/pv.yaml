@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: keycloak-ha-data
+spec:
+  accessModes: [ReadWriteOnce]
+  capacity:
+    storage: 1Gi
+  claimRef:
+    name: keycloak-ha-data
+    namespace: default
+  local:
+    path: /vol/efs/keycloak/ha-data
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  volumeMode: Filesystem
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - ip-10-0-19-23
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: keycloak-ha-data
+spec:
+  accessModes: [ReadWriteOnce]
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: local-storage

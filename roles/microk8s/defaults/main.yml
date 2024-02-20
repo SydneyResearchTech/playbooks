@@ -6,3 +6,5 @@ microk8s_metallb_range: "{{ ansible_default_ipv4.network+'/'+ansible_default_ipv
 microk8s_local_storage: []
 # - path: /scratch/cryosparc
 #   age: 1w
+# https://prometheus.io/docs/guides/node-exporter/
+microk8s_node_exporter_metrics_enabled: false

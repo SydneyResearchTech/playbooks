@@ -1,0 +1,35 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: observe
+  namespace: observability
+  annotations: {}
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: observe.fake.sydney.edu.au
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kube-prom-stack-grafana
+                port:
+                  number: 80
+    - host: prometheus.fake.sydney.edu.au
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kube-prom-stack-kube-prome-prometheus
+                port:
+                  number: 9090
+  tls:
+    - hosts:
+        - observe.fake.sydney.edu.au
+        - prometheus.fake.sydney.edu.au
+      secretName: observe-tls

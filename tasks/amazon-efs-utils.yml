@@ -1,0 +1,25 @@
+# https://docs.aws.amazon.com/efs/latest/ug/installing-amazon-efs-utils.html#installing-other-distro
+# /etc/fstab
+# fs-019b87186b4284827 /vol/efs efs x-systemd.automount,_netdev,nofail 0 0
+#
+- name: 
+  ansible.builtin.apt:
+    name:
+      - git
+      - binutils
+
+- name: clone efs-utils
+  ansible.builtin.git:
+    https://github.com/aws/efs-utils
+
+- name: build debs
+  ansible.builtin.command:
+    cmd: ./build-debs.sh
+
+- name: install efs-utils
+  ansible.builitn.apt:
+    deb: ./build/amazon-efs-utils*deb
+
+- name: install botocore
+  ansible.builtin.pip:
+    name: botocore

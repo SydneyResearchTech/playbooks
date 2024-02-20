@@ -1,3 +1,13 @@
 ---
+microk8s_enable:
+  - cert-manger
+  - dns
+  - ha-cluster
+  - helm3
+  - ingress
+  - metallb
+  - observability
+  - rbac
+  - registry
 microk8s_local_storage:
   - path: /scratch/cryosparc-ssd-2e5342e00d2b

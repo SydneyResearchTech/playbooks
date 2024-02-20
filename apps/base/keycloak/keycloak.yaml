@@ -37,5 +37,5 @@ spec:
               mountPath: /opt/keycloak/data
       volumes:
         - name: h2-data
-          emptyDir:
-            sizeLimit: 500Mi
+          persistentVolumeClaim:
+            claimName: keycloak-ha-data
