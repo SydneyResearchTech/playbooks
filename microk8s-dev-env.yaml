@@ -1,5 +1,5 @@
 - name: microk8s development environment
-  hosts: localhost
+  hosts: "{{ playbook_hosts|default('all') }}"
   become: true
   connection: local
 

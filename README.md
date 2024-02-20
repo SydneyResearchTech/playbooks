@@ -14,8 +14,19 @@ sudo apt install ansible
 
 Run playbook with `ansible-pull`
 
+Ref.
+* [ansible-pull](https://docs.ansible.com/ansible/latest/cli/ansible-pull.html)
+
 ```bash
-ansible-pull -U https://github.com/SydneyResearchTech/playbooks.git [playbook.yml ...]
+# test ansible playbook
+ansible-pull -clocal -i,localhost --check --diff \
+ -U https://github.com/SydneyResearchTech/playbooks.git \
+ [playbook.yml ...]
+
+# run ansible playbook
+ansible-pull -clocal -i,localhost \
+ -U https://github.com/SydneyResearchTech/playbooks.git \
+ [playbook.yml ...]
 ```
 
 ## Playbooks
@@ -44,8 +55,32 @@ microk8s enable metallb:<IP_RANGE>
 ```
 
 ```bash
-# run ansible playbook
-ansible-pull -U https://github.com/SydneyResearchTech/playbooks.git microk8s-dev-env.yaml
+# test ansible playbook
+ansible-pull -clocal -i,localhost --check --diff \
+ -U https://github.com/SydneyResearchTech/playbooks.git \
+ microk8s-dev-env.yaml
 
-${HOME}/.ansible/pull/ip-10-0-19-23.ap-southeast-2.compute.internal/bin/external-dns.sh
+# run ansible playbook for localhost
+ansible-pull -clocal -i,localhost \
+ -U https://github.com/SydneyResearchTech/playbooks.git \
+ microk8s-dev-env.yaml
+
+${HOME}/.ansible/pull/$(hostname --fqdn)/bin/external-dns.sh
+
+# run ansible playbook from jump host, replace <hostname> with target hostname
+ansible-pull -i,<hostname> \
+ -U https://github.com/SydneyResearchTech/playbooks.git \
+ microk8s-dev-env.yaml
+```
+
+For more complex deployments you will need to pre-configure an inventory on your ansible run host.
+If you want the playbook to target a group of hosts, once your inventory is configured you can perform the following.
+
+Ref.
+* [How to build your inventory](https://docs.ansible.com/ansible/latest/inventory_guide/intro_inventory.html)
+
+```bash
+ansible-pull -i<PATH_TO_INVENTORY_FILE_OR_DIRECTORY> -e 'playbook_hosts=<GROUP_NAME>' \
+ -U https://github.com/SydneyResearchTech/playbooks.git \
+ microk8s-dev-env.yaml
 ```
