@@ -8,6 +8,13 @@
     - named
 
   tasks:
+    - name: /usr/local/bin/finalise-external-dns.sh
+      ansible.builtin.template:
+        dest: /usr/local/bin/finalise-external-dns.sh
+        lstrip_blocks: true
+        mode: "0755"
+        src: templates/usr/local/bin/finalise-external-dns.sh.j2
+
     - block:
       - name: /etc/resolv.conf is symlink?
         ansible.builtin.stat:

@@ -65,7 +65,8 @@ ansible-pull -clocal -i,localhost \
  -U https://github.com/SydneyResearchTech/playbooks.git \
  microk8s-dev-env.yaml
 
-${HOME}/.ansible/pull/$(hostname --fqdn)/bin/external-dns.sh
+# WORKAROUND. finishes the external dns configuration until this fully integrated.
+finalise-external-dns.sh
 
 # run ansible playbook from jump host, replace <hostname> with target hostname
 ansible-pull -i,<hostname> \
