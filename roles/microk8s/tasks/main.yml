@@ -3,7 +3,7 @@
 - name: microk8s install
   ansible.builtin.command:
     cmd: snap install microk8s --classic
-  creates: /snap/microk8s
+    creates: /snap/microk8s
 
 - name: microk8s status
   ansible.builtin.shell:

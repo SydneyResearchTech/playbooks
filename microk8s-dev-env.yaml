@@ -4,45 +4,49 @@
 
   roles:
     - microk8s
-    - named
+    - role: named
+      when: named_enabled
 
   tasks:
-    - name: /usr/local/bin/finalise-external-dns.sh
-      ansible.builtin.template:
-        dest: /usr/local/bin/finalise-external-dns.sh
-        lstrip_blocks: true
-        mode: "0755"
-        src: templates/usr/local/bin/finalise-external-dns.sh.j2
-
     - block:
-      - name: /etc/resolv.conf is symlink?
-        ansible.builtin.stat:
-          path: /etc/resolv.conf
-        register: resolv_conf
+      - name: /usr/local/bin/finalise-external-dns.sh
+        ansible.builtin.template:
+          dest: /usr/local/bin/finalise-external-dns.sh
+          lstrip_blocks: true
+          mode: "0755"
+          src: templates/usr/local/bin/finalise-external-dns.sh.j2
 
       - block:
-        - name: unlink /etc/resolv.conf from systemd-resolved
-          ansible.builtin.command:
-            cmd: unlink /etc/resolv.conf
+        - name: /etc/resolv.conf is symlink?
+          ansible.builtin.stat:
+            path: /etc/resolv.conf
+          register: resolv_conf
 
-        - name: copy /run/systemd/resolve/stub-resolv.conf to /etc/resolv.conf
+        - block:
+          - name: unlink /etc/resolv.conf from systemd-resolved
+            ansible.builtin.command:
+              cmd: unlink /etc/resolv.conf
+
+          - name: copy /run/systemd/resolve/stub-resolv.conf to /etc/resolv.conf
+            ansible.builtin.shell:
+              cmd: sed -n -e '/^#/!p' /run/systemd/resolve/stub-resolv.conf >/etc/resolv.conf
+          when: resolv_conf.stat.islnk
+
+        - name: set nameserver
+          ansible.builtin.lineinfile:
+            line: nameserver {{ ansible_default_ipv4.address }}
+            path: /etc/resolv.conf
+            search_string: nameserver
+
+        - name: microk8s set nameserver
           ansible.builtin.shell:
-            cmd: sed -n -e '/^#/!p' /run/systemd/resolve/stub-resolv.conf >/etc/resolv.conf
-        when: resolv_conf.stat.islnk
-
-      - name: set nameserver
-        ansible.builtin.lineinfile:
-          line: nameserver {{ ansible_default_ipv4.address }}
-          path: /etc/resolv.conf
-          search_string: nameserver
-
-      - name: microk8s set nameserver
-        ansible.builtin.shell:
-          cmd: >
-            microk8s kubectl -n kube-system get configmap/coredns -oyaml
-            | sed 's/forward \. .*$/forward . {{ ansible_default_ipv4.address }}/'
-            | microk8s kubectl apply -f -
-      tags: [bind,named,resolvd]
+            cmd: >
+              microk8s kubectl -n kube-system get configmap/coredns -oyaml
+              | sed 's/forward \. .*$/forward . {{ ansible_default_ipv4.address }}/'
+              | microk8s kubectl apply -f -
+        tags: [bind,named,resolvd]
+      when:
+        - named_enabled
 
     - block:
       - name: ingress service
