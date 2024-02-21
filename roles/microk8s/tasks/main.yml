@@ -1,10 +1,13 @@
 ---
 # tasks file for microk8s
-#- name: microk8s install
+- name: microk8s install
+  ansible.builtin.command:
+    cmd: snap install microk8s --classic
+  creates: /snap/microk8s
 
 - name: microk8s status
   ansible.builtin.shell:
-    cmd: microk8s status --format short
+    cmd: microk8s status --format short --wait-ready --timeout 60
   register: microk8s_status
 
 - block:
@@ -19,7 +22,7 @@
     - "microk8s_enable|select('search','^metallb$')|length>0"
     - "microk8s_status.stdout_lines|select('search','core/metallb: disabled')|length>0"
 
-- name: microk8s enable
+- name: microk8s enable ...
   ansible.builtin.shell:
     cmd: |
       ADDON="{{ item }}"

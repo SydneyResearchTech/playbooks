@@ -33,7 +33,7 @@ ansible-pull -clocal -i,localhost \
 
 | Playbook | Purpose | Notes |
 | -------- | ------- | ----- |
-| microk8s-dev-env.yaml | Kubernetes cluster for development. Incorporating DNS resolution and configuration management, Certificate management, Load balancer and Ingress controller. | Uses include OIDC and other authentication integration work. Symulation of full disparate service. Includes full DNS provider functionality. |
+| microk8s-dev-env.yaml | Kubernetes cluster for development. Incorporating DNS resolution and configuration management, Certificate management, Load balancer and Ingress controller. | Uses include OIDC and other authentication integration work. Simulation of full disparate service. Includes full DNS provider functionality. |
 
 ## Roles
 
@@ -79,9 +79,28 @@ If you want the playbook to target a group of hosts, once your inventory is conf
 
 Ref.
 * [How to build your inventory](https://docs.ansible.com/ansible/latest/inventory_guide/intro_inventory.html)
+* [Controlling how Ansible behaves: precedence rules](https://docs.ansible.com/ansible/latest/reference_appendices/general_precedence.html#general-precedence-rules)
+* [Playbook variables - precedence](https://docs.ansible.com/ansible/latest/playbook_guide/playbooks_variables.html#understanding-variable-precedence)
+
+NB: An issue with ansible-pull and an inventory directory (as apposed to a single file) has been found.
+Ansible-pull will not use the local group_vars or host_vars settings when an inventory directory is used even though the inventory rules are honoured.
 
 ```bash
-ansible-pull -i<PATH_TO_INVENTORY_FILE_OR_DIRECTORY> -e 'playbook_hosts=<GROUP_NAME>' \
+ansible-pull -i<PATH_TO_INVENTORY_FILE_OR_DIRECTORY> -e 'target=<GROUP_NAME>' \
+ -U https://github.com/SydneyResearchTech/playbooks.git \
+ microk8s-dev-env.yaml
+
+# OR add a more comprehensive configuration that includes the inventory path
+cat <<EOT >$HOME/.ansible.cfg
+[defaults]
+inventory = ~/.ansible/hosts.yml
+[ssh_connection]
+ssh_args = -o StrictHostKeyChecking=accept-new -o ControlMaster=auto -o ControlPersist=60s -o ControlPath=/tmp/%r@%h:%p
+EOT
+
+export ANSIBLE_CONFIG=$HOME/.ansible.cfg
+
+ansible-pull -e 'target=<GROUP_NAME>' \
  -U https://github.com/SydneyResearchTech/playbooks.git \
  microk8s-dev-env.yaml
 ```
