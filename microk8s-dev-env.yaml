@@ -9,6 +9,12 @@
 
   tasks:
     - block:
+      - name: amazon-efs-utils
+        ansible.builtin.include_tasks: tasks/amazon-efs-utils.yml
+      when:
+        - ansible_system_vendor == "Amazon EC2"
+
+    - block:
       - name: /usr/local/bin/finalise-external-dns.sh
         ansible.builtin.template:
           dest: /usr/local/bin/finalise-external-dns.sh

@@ -2,7 +2,7 @@
 # /etc/fstab
 # fs-019b87186b4284827 /vol/efs efs x-systemd.automount,_netdev,nofail 0 0
 #
-- name: 
+- name: pre-req.
   ansible.builtin.apt:
     name:
       - git
@@ -10,15 +10,27 @@
 
 - name: clone efs-utils
   ansible.builtin.git:
-    https://github.com/aws/efs-utils
+    accept_newhostkey: true
+    dest: /usr/local/src/efs-utils
+    repo: https://github.com/aws/efs-utils
 
 - name: build debs
   ansible.builtin.command:
-    cmd: ./build-debs.sh
+    chdir: /usr/local/src/efs-utils
+    cmd: ./build-deb.sh
+    creates: ./build
+
+- name: get built packages
+  ansible.builtin.find:
+    paths: ['/usr/local/src/efs-utils/build']
+    patterns: ['*.deb']
+    recurse: false
+  register: amazon_efs_utils
 
 - name: install efs-utils
-  ansible.builitn.apt:
-    deb: ./build/amazon-efs-utils*deb
+  ansible.builtin.apt:
+    deb: "{{ item.path }}"
+  loop: "{{ amazon_efs_utils.files }}"
 
 - name: install botocore
   ansible.builtin.pip:

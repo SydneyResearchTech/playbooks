@@ -1,0 +1,45 @@
+---
+# roles/microk8s/tasks/local-storage.yml
+# https://www.freedesktop.org/software/systemd/man/latest/tmpfiles.d.html
+- name: local-storage tmpfiles.d
+  ansible.builtin.copy:
+    content: |
+      {% for i in microk8s_local_storage %}
+      d {{ i.path }} 1777 root root {{ i.age|default('-',true) }}
+      {% endfor %}
+    dest: /etc/tmpfiles.d/microk8s-local-storage.conf
+  notify:
+    - create tmpfiles
+
+- name: k8s persistent volume
+  ansible.builtin.shell:
+    cmd: |
+      cat <<EOT |microk8s kubectl apply -f -
+      apiVersion: v1
+      kind: PersistentVolume
+      metadata:
+        name: "{{ item.claimRef.namespace }}-{{ item.claimRef.name }}"
+      spec:
+        accessModes: [ReadWriteOnce, ReadWriteMany]
+        capacity:
+          storage: "{{ item.capacityStorage |default('100Gi') }}"
+        claimRef:
+          name: "{{ item.claimRef.name }}"
+          namespace: "{{ item.claimRef.namespace }}"
+        local:
+          path: "{{ item.path }}"
+        persistentVolumeReclaimPolicy: "{{ item.persistentVolumeReclaimPolicy |default('Retain') }}"
+        storageClassName: local-storage
+        volumeMode: Filesystem
+        nodeAffinity:
+          required:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values:
+                - "{{ ansible_hostname }}"
+      EOT
+  with_items: "{{ microk8s_local_storage }}"
+  when:
+    - item.claimRef is defined

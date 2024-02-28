@@ -47,13 +47,5 @@
       volumeBindingMode: WaitForFirstConsumer
       EOT
 
-# https://www.freedesktop.org/software/systemd/man/latest/tmpfiles.d.html
-- name: local-storage tmpfiles.d
-  ansible.builtin.copy:
-    content: |
-      {% for i in microk8s_local_storage %}
-      d {{ i.path }} 1777 root root {{ i.age|default('-',true) }}
-      {% endfor %}
-    dest: /etc/tmpfiles.d/microk8s-local-storage.conf
-  notify:
-    - create tmpfiles
+- name: local-storage
+  ansible.builtin.import_tasks: local-storage.yml
