@@ -2,18 +2,19 @@
   hosts: "{{ target|default('all') }}"
   become: true
 
-  roles:
-    - microk8s
-    - role: named
-      when: named_enabled
-
-  tasks:
+  pre-tasks:
     - block:
       - name: amazon-efs-utils
         ansible.builtin.include_tasks: tasks/amazon-efs-utils.yml
       when:
         - ansible_system_vendor == "Amazon EC2"
 
+  roles:
+    - role: microk8s
+    - role: named
+      when: named_enabled
+
+  tasks:
     - block:
       - name: /usr/local/bin/finalise-external-dns.sh
         ansible.builtin.template:
