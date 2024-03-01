@@ -10,6 +10,14 @@
     cmd: microk8s status --format short --wait-ready --timeout 60
   register: microk8s_status
 
+- name: /etc/profile.d/microk8s.sh
+  ansible.builtin.copy:
+    dest: /etc/profile.d/microk8s.sh
+    group: root
+    mode: "0644"
+    owner: root
+    src: files/profile.sh
+
 - block:
   - name: metallb range
     ansible.builtin.script:

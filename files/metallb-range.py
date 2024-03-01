@@ -16,7 +16,7 @@ def main(ip_network="10.0.16.0/20"):
         else:
             ips.append(ip.exploded)
         if len(ips) >= 5:
-            print("metallb:%s-%s" % (ips[0], ips[-1]))
+            print("metallb:%s-%s" % (ips[0], ips[-1]), end='')
             break
 
 if __name__ == "__main__":
