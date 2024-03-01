@@ -2,7 +2,7 @@
   hosts: "{{ target|default('all') }}"
   become: true
 
-  pre-tasks:
+  pre_tasks:
     - block:
       - name: amazon-efs-utils
         ansible.builtin.include_tasks: tasks/amazon-efs-utils.yml

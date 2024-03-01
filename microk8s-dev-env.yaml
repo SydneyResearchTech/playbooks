@@ -2,7 +2,7 @@
   hosts: "{{ target|default('all') }}"
   become: true
 
-  pre-tasks:
+  pre_tasks:
     - block:
       - name: amazon-efs-utils
         ansible.builtin.include_tasks: tasks/amazon-efs-utils.yml
@@ -15,6 +15,52 @@
       when: named_enabled
 
   tasks:
+    - name: /etc/docker exists
+      ansible.builtin.stat:
+        path: /etc/docker
+      register: is_docker
+    - block:
+      - name: /etc/docker/daemon.json create
+        ansible.builtin.copy:
+          content: "{}"
+          dest: /etc/docker/daemon.json
+          force: false
+
+      - name: /etc/docker/daemon.json read
+        ansible.builtin.slurp:
+          src: /etc/docker/daemon.json
+        register: daemon_json
+
+      - name: /etc/docker/daemon.json
+        # https://github.com/particledecay/ansible-jsonpatch
+        json_patch:
+          src: /etc/docker/daemon.json
+          operations:
+            - op: add
+              path: "/insecure-registries"
+              value: []
+          pretty: true
+          create: true
+          create_type: object
+        when:
+          - (daemon_json['content']|b64decode|from_json)['insecure-registries'] is not defined
+
+      - name: /etc/docker/daemon.json
+        json_patch:
+          src: /etc/docker/daemon.json
+          operations:
+            - op: add
+              path: "/insecure-registries/-"
+              value: "localhost:32000"
+          pretty: true
+          create: true
+          create_type: object
+        when:
+          - (daemon_json['content']|b64decode|from_json)['insecure-registries'] is not defined
+            or (daemon_json['content']|b64decode|from_json)['insecure-registries'] is not contains('localhost:32000')
+      when:
+        - is_docker.stat.isdir is defined and is_docker.stat.isdir
+
     - block:
       - name: /usr/local/bin/finalise-external-dns.sh
         ansible.builtin.template:
