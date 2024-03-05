@@ -1,0 +1,15 @@
+- name: hostpath storage classes ...
+  ansible.builtin.shell:
+    cmd: |
+      microk8s kubectl apply -f - <<EOT
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: {{ item.name }}
+      provisioner: microk8s.io/hostpath
+      reclaimPolicy: Delete
+      parameters:
+        pvDir: {{ item.path }}
+      volumeBindingMode: WaitForFirstConsumer
+      EOT
+  with_items: "{{ microk8s_hostpaths }}"

@@ -10,10 +10,21 @@ microk8s_enable:
 - observability
 - rbac
 - registry
-microk8s_metallb_range: "{{ ansible_default_ipv4.network+'/'+ansible_default_ipv4.prefix }}"
+
+microk8s_storageclass_default: ""
+
+# https://microk8s.io/docs/addon-hostpath-storage
+microk8s_hostpaths: []
+# - name: scratch-hostpath
+#   path: /scratch/microk8s-hostpath
+# - name: ssd-hostpath
+#   path: /ssd/microk8s-hostpath
+
 # local-storage mount paths
 microk8s_local_storage: []
 # - path: /scratch/cryosparc
 #   age: 1w
+
+microk8s_metallb_range: "{{ ansible_default_ipv4.network+'/'+ansible_default_ipv4.prefix }}"
 # https://prometheus.io/docs/guides/node-exporter/
 microk8s_node_exporter_metrics_enabled: false
