@@ -1,0 +1,4 @@
+- name: .kube/config
+  ansible.builtin.shell:
+    cmd: |
+      [ -f ${HOME}/.kube/config ] || microk8s config >${HOME}/.kube/config

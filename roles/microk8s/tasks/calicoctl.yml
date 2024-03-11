@@ -1,3 +1,11 @@
+# roles/microk8s/tasks/calicoctl.yml
+# https://docs.tigera.io/calico/latest/operations/calicoctl/install
+# kubectl get clusterinformations -ojson |jq '.items[]|select(.apiVersion|contains("crd.projectcalico.org/v1"))|.spec.calicoVersion'
+# ToDo:
+# - Add options for kubectl plugin and Docker installations
+# - Use logic above to automatically detect Calico version required when not set
+# - Ensure .kube/config is configured for cluster access for calicoctl configuration purpose
+#
 - name: calicoctl binary download
   ansible.builtin.get_url:
     dest: /usr/local/bin/calicoctl
