@@ -1,5 +1,13 @@
 ---
 # tasks file for microk8s
+- name: pre-req. install
+  ansible.builtin.apt:
+    cache_valid_time: 86400
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - "{{ microk8s_wireguard_enabled|ternary(['wireguard'],[]) }}"
+
 - name: microk8s install
   ansible.builtin.command:
     cmd: snap install microk8s --classic

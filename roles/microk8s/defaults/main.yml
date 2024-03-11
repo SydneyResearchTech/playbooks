@@ -13,10 +13,13 @@ microk8s_enable:
 
 microk8s_storageclass_default: ""
 
+# Calico host2host encryption requirement
+microk8s_wireguard_enabled: false
+
 # https://microk8s.io/docs/addon-hostpath-storage
 microk8s_hostpaths: []
 # - name: scratch-hostpath
-#   path: /scratch/microk8s-hostpath
+#   path: /scratch/{{ ansible_machine_id }}/microk8s-hostpath
 # - name: ssd-hostpath
 #   path: /ssd/microk8s-hostpath
 
