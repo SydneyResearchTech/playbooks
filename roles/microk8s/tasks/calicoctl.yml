@@ -1,0 +1,10 @@
+- name: calicoctl binary download
+  ansible.builtin.get_url:
+    dest: /usr/local/bin/calicoctl
+    group: root
+    mode: 0755
+    owner: root
+    url: "https://github.com/projectcalico/calico/releases/download/\
+      {{ microk8s_calicoctl_version }}/\
+      calicoctl-linux-\
+      {{ ('x86_64' in ansible_architecture)|ternary('amd64',ansible_architecture) }}"

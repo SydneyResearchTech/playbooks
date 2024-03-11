@@ -11,6 +11,9 @@ microk8s_enable:
 - rbac
 - registry
 
+microk8s_calicoctl_version: ""
+#microk8s_calicoctl_version: v3.25.1
+
 microk8s_storageclass_default: ""
 
 # Calico host2host encryption requirement

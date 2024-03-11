@@ -72,3 +72,8 @@
 
 - name: local-storage
   ansible.builtin.import_tasks: local-storage.yml
+
+- name: calicoctl
+  ansible.builtin.import_tasks: calicoctl.yml
+  when:
+    - "microk8s_calicoctl_version|length>0"
