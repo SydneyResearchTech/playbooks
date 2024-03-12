@@ -1,12 +1,28 @@
 ---
 # tasks file for microk8s
-- name: pre-req. install
+#
+- name: apt update
   ansible.builtin.apt:
     cache_valid_time: 86400
+    update_cache: true
+  when:
+    - "'Debian' in ansible_os_family"
+
+- name: pre-req. install
+  ansible.builtin.package:
     name: "{{ item }}"
     state: present
   with_items:
-    - "{{ microk8s_wireguard_enabled|ternary(['wireguard'],[]) }}"
+    - "{{ microk8s_package_prereqs }}"
+
+- name: snapd install
+  ansible.builtin.include_tasks:
+    file: "{{ item }}"
+  with_first_found:
+    - files:
+      - snapd/install-{{ ansible_distribution }}-{{ ansible_distribution_version }}.yml
+      - snapd/install-{{ ansible_distribution }}.yml
+      - snapd/install.yml
 
 - name: microk8s install
   ansible.builtin.command:
@@ -26,31 +42,35 @@
     owner: root
     src: files/profile.sh
 
-- block:
-  - name: metallb range
-    ansible.builtin.script:
-      cmd: files/metallb-range.py "{{ microk8s_metallb_range }}"
-      executable: "{{ ansible_python.executable }}"
-    register: metallb_range
-  - ansible.builtin.debug:
-      var: metallb_range.stdout
-  when:
-    - "microk8s_enable|select('search','^metallb$')|length>0"
-    - "microk8s_status.stdout_lines|select('search','core/metallb: disabled')|length>0"
+- name: /usr/local/bin/metallb-range.py
+  ansible.builtin.copy:
+    dest: /usr/local/bin/metallb-range.py
+    group: root
+    mode: 0755
+    owner: root
+    src: files/metallb-range.py
 
 - name: microk8s enable ...
   ansible.builtin.shell:
     cmd: |
       ADDON="{{ item }}"
       if [[ $ADDON == metallb* ]]; then
-        [[ -z $METALLB ]] || ADDON="${METALLB}"
+        [[ $ADDON == metallb:* ]] \
+          && microk8s enable ${ADDON} \
+          || microk8s enable $(metallb-range.py "{{ microk8s_metallb_range }}")
+      else
+        microk8s enable ${ADDON}
       fi
-      microk8s enable ${ADDON}
   with_items:
     - "{{ microk8s_enable }}"
     - "{{ ((microk8s_hostpaths|length>0) and (microk8s_enable|select('search','hostpath-storage')|length==0))|ternary(['hostpath-storage'],[]) }}"
   when:
     - "microk8s_status.stdout_lines|select('search',('core/%s: disabled'|format((item|split(':'))[0])))|length>0"
+
+- name: ingress service
+  ansible.builtin.import_tasks: ingress-lb-patch.yml
+  when:
+    - "'metallb' in microk8s_enable"
 
 - name: microk8s-hostpath storage class
   ansible.builtin.import_tasks: hostpath_provisioner.yml

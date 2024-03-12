@@ -1,0 +1,11 @@
+# roles/microk8s/tasks/snapd/install-Debian.yml
+#
+- name: snap install
+  ansible.builtin.package:
+    name: snapd
+    state: present
+
+- name: snap install core
+  ansible.builtin.command:
+    cmd: snap install core
+    creates: "/snap/core*"

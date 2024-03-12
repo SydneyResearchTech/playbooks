@@ -1,0 +1,20 @@
+# roles/microk8s/tasks/snapd/install-CentOS.yml
+# https://docs.fedoraproject.org/en-US/epel/
+#
+- name: epel-release install
+  ansible.builtin.package:
+    name: epel-release
+    state: present
+
+- name: snapd install
+  ansible.builtin.package:
+    name: snapd
+    state: present
+
+# sudo systemctl enable --now snapd.socket
+
+- name: enable classic snap support
+  ansible.builtin.file:
+    src: /var/lib/snapd/snap
+    dest: /snap
+    state: link
