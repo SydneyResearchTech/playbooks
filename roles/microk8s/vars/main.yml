@@ -1,5 +1,4 @@
 ---
 # vars file for microk8s
 #
-microk8s_package_prereqs:
-  - "{{ microk8s_wireguard_enabled|ternary(['wireguard'],[]) }}"
+microk8s_packages: []

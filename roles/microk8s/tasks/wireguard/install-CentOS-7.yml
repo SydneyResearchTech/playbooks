@@ -1,0 +1,20 @@
+- name: epel install
+  ansible.builtin.package:
+    name: epel-release
+    status: present
+
+- name: wireguard-dkms repo
+  ansible.builtin.get_url:
+    dest: /etc/yum.repos.d/jdoss-wireguard-epel-7.repo
+    group: root
+    mode: 0644
+    owner: root
+    url: https://copr.fedorainfracloud.org/coprs/jdoss/wireguard/repo/epel-7/jdoss-wireguard-epel-7.repo
+
+- name: wireguard install
+  ansible.builtin.package:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - wireguard-dkms
+    - wireguard-tools
