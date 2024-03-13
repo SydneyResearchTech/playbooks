@@ -1,5 +1,6 @@
 ---
 # defaults file for microk8s
+## \param microk8s_enable []string addons to enable `microk8s status` lists available options.
 microk8s_enable:
 - cert-manger
 - dns
@@ -11,26 +12,35 @@ microk8s_enable:
 - rbac
 - registry
 
+## \param microk8s_calicoctl_version string calicoctl version to install on host.
 microk8s_calicoctl_version: ""
 #microk8s_calicoctl_version: v3.25.1
 
+## \param microk8s_storageclass_default string not currently used
 microk8s_storageclass_default: ""
 
-# Calico host2host encryption requirement
+## \param microk8s_wireguard_enabled boolean Calico host2host in transit encryption requirement
 microk8s_wireguard_enabled: false
 
 # https://microk8s.io/docs/addon-hostpath-storage
+## \param microk8s_hostpaths []object Storage class dynamic provisioning local directory paths
+## \param microk8s_hostpaths.[].name string Storage class name
+## \param microk8s_hostpaths.[].path string Host directory base path
 microk8s_hostpaths: []
 # - name: scratch-hostpath
 #   path: /scratch/{{ ansible_machine_id }}/microk8s-hostpath
 # - name: ssd-hostpath
 #   path: /ssd/microk8s-hostpath
 
-# local-storage mount paths
+## \param microk8s_local_storage []object Persistent volume(s) for local host directory path
+## \param microk8s_local_storage.[].path string Host directory path
+## \param microk8s_local_storage.[].age string Directory cleanup time period
+## \param microk8s_local_storage.[].claimRef object [Reserving a PersistentVolume](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#reserving-a-persistentvolume)
 microk8s_local_storage: []
 # - path: /scratch/cryosparc
 #   age: 1w
 
+## \param microk8s_metallb_range string Load balancer IP address ranges
 microk8s_metallb_range: "{{ ansible_default_ipv4.network+'/'+ansible_default_ipv4.prefix }}"
 # https://prometheus.io/docs/guides/node-exporter/
 microk8s_node_exporter_metrics_enabled: false

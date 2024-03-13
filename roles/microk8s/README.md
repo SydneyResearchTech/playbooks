@@ -1,15 +1,20 @@
-Role Name
+microk8s
 =========
 
-A brief description of the role goes here.
+MicroK8s configuration management.
 
 Requirements
 ------------
 
-Any pre-requisites that may not be covered by Ansible itself or the role should be mentioned here. For instance, if the role uses the EC2 module, it may be a good idea to mention in this section that the boto package is required.
 
 Role Variables
 --------------
+
+| microk8s_enable | []string MicroK8s add-ons to enable |
+| microk8s_calicoctl_version | string calicoctl version number to install on host |
+| microk8s_wireguard_enabled | boolean Wireguard installation for Calico encryption in transit layer |
+| microk8s_hostpaths | []structure Dynamic Storage Class for locally attached paths |
+| microk8s_metallb_range | Load balancer IP addresses range for initial MetalLB configuration |
 
 A description of the settable variables for this role should go here, including any variables that are in defaults/main.yml, vars/main.yml, and any variables that can/should be set via parameters to the role. Any variables that are read from other roles and/or the global scope (ie. hostvars, group vars, etc.) should be mentioned here as well.
 
