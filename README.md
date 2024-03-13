@@ -91,14 +91,14 @@ ansible-pull -i<PATH_TO_INVENTORY_FILE_OR_DIRECTORY> -e 'target=<GROUP_NAME>' \
  microk8s-dev-env.yaml
 
 # OR add a more comprehensive configuration that includes the inventory path
-cat <<EOT >$HOME/.ansible.cfg
+cat <<EOT |sudo tee /etc/ansible.cfg
 [defaults]
-inventory = ~/.ansible/hosts.yml
+inventory = /etc/ansible/hosts.yml
 [ssh_connection]
 ssh_args = -o StrictHostKeyChecking=accept-new -o ControlMaster=auto -o ControlPersist=60s -o ControlPath=/tmp/%r@%h:%p
 EOT
 
-export ANSIBLE_CONFIG=$HOME/.ansible.cfg
+echo 'export ANSIBLE_CONFIG=/etc/ansible.cfg' |sudo tee /etc/profile.d/ansible.sh
 
 ansible-pull -e 'target=<GROUP_NAME>' \
  -U https://github.com/SydneyResearchTech/playbooks.git \
