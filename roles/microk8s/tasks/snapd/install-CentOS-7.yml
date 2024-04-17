@@ -1,0 +1,14 @@
+- name: SystemD resolved workaround
+  ansible.builtin.copy:
+    content: |
+      D /run/systemd/resolve 0755 root root - -
+      L /run/systemd/resolve/resolv.conf - - - - /etc/resolv.conf
+    dest: /etc/tmpfiles.d/microk8s.conf
+    group: root
+    mode: 0644
+    owner: root
+  notify:
+    - create tmpfiles
+
+- name: default CentOS install
+  ansible.builtin.include_tasks: snap/install-{{ ansible_distribution }}.yml
