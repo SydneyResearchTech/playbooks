@@ -43,6 +43,15 @@
     owner: root
     src: files/profile.sh
 
+- block:
+    - name: nvidia-container-runtime repo
+      ansible.builtin.include_tasks: nvidia-container-runtime/{{ ansible_os_family }}.yml
+
+    - name: nvidia-container-runtime install
+      ansible.builtin.include_tasks: nvidia-container-runtime/install.yml
+  when:
+    - "'gpu' in microk8s_enable"
+
 - name: /usr/local/bin/metallb-range.py
   ansible.builtin.copy:
     dest: /usr/local/bin/metallb-range.py
@@ -55,7 +64,9 @@
   ansible.builtin.shell:
     cmd: |
       ADDON="{{ item }}"
-      if [[ $ADDON == metallb* ]]; then
+      if [[ $ADDON == gpu ]]; then
+        microk8s enable gpu --set toolkit.enabled=false
+      elif [[ $ADDON == metallb* ]]; then
         [[ $ADDON == metallb:* ]] \
           && microk8s enable ${ADDON} \
           || microk8s enable $(metallb-range.py "{{ microk8s_metallb_range }}")

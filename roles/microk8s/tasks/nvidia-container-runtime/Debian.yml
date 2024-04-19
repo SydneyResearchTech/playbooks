@@ -1,0 +1,17 @@
+- name: nvidia-container-toolkit-keyring
+  ansible.builtin.shell:
+    cmd: >
+      curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey
+      | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+    creates: /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+
+# deb https://nvidia.github.io/libnvidia-container/stable/deb/$(ARCH) /
+- name: nvidia-container-toolkit repository
+  ansible.builtin.apt_repository:
+    filename: nvidia-container-toolkit
+    repo: >
+      deb 
+      [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg]
+      https://nvidia.github.io/libnvidia-container/stable/deb/$(ARCH)
+      /
+    state: present

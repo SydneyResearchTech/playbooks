@@ -1,0 +1,13 @@
+- name: nvidia-container-toolkit repository
+  ansible.builtin.yum_repository:
+    base_url: https://nvidia.github.io/libnvidia-container/stable/rpm/$basearch
+    description: nvidia-container-toolkit
+    enabled: true
+    file: nvidia-container-toolkit
+    gpgcheck: false
+    gpgkey: https://nvidia.github.io/libnvidia-container/gpgkey
+    name: nvidia-container-toolkit
+    repo_gpgcheck: true
+    sslcacert: /etc/pki/tls/certs/ca-bundle.crt
+    sslverify: true
+    state: present

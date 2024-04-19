@@ -1,0 +1,19 @@
+- name: install nvidia-container-toolkit
+  ansible.builtin.package:
+    name:
+      - nvidia-container-toolkit
+    state: present
+
+- name: update containerd
+  ansible.builtin.blockinfile:
+    backup: true
+    block: |
+              [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia]
+                runtime_type = "io.containerd.runc.v2"
+
+                [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia.options]
+                  BinaryName = "/usr/bin/nvidia-container-runtime"
+    path: /var/snap/microk8s/current/args/containerd-template.toml
+    state: present
+  notify:
+    - restart microk8s
