@@ -3,3 +3,7 @@
 - name: create tmpfiles
   ansible.builtin.command:
     cmd: systemd-tmpfiles --create
+
+- name: restart microk8s
+  ansible.builtin.command:
+    cmd: snap restart microk8s
