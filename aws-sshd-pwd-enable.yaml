@@ -1,0 +1,76 @@
+---
+# ansible-playbook aws-sshd-pwd-enable.yaml -e "{target: cvl, active: false}"
+# NB: AWS_PROFILE environment variable required if not default target account
+# Configure default user password and enable SSHd password authentication.
+# Used for training, workshops and other instances where temporary access is required.
+#
+- name: amazon ec2 SSHd password enable
+  hosts: "{{ target |mandatory }}"
+  become: true
+  vars:
+    default_user: ubuntu
+    conf_path: /etc/ssh/sshd_config.d/00-ansible-aws-sshd-pwd-enable.conf
+
+  pre_tasks:
+  - name: assertions
+    ansible.builtin.assert:
+      fail_msg: Mandatory variable(s) not provided or incorrect format.
+      success_msg: OK
+      that:
+      - active is defined
+      - active is boolean
+
+  tasks:
+  - name: generate password
+    set_fact:
+      PASSWORD: "{{ lookup('ansible.builtin.password', '/dev/null', seed=inventory_hostname) }}"
+
+  - block:
+    - name: set default user password
+      ansible.builtin.user:
+        name: "{{ default_user }}"
+        password: "{{ PASSWORD | password_hash }}"
+        update_password: always
+      notify:
+        - expire password
+
+    - name: sshd password authentication
+      ansible.builtin.copy:
+        content: |
+          PasswordAuthentication yes
+        dest: "{{ conf_path }}"
+        mode: "0600"
+        #validate: sshd -T
+        #validate: sshd -T | grep -q 'passwordauthentication yes'
+      notify:
+        - reload sshd
+    when:
+      - active
+
+  - name: sshd password authentication disable
+    ansible.builtin.file:
+      path: "{{ conf_path }}"
+      state: absent
+    notify:
+    - reload sshd
+    when:
+      - not active
+
+  - name: set tag
+    local_action:
+      module: amazon.aws.ec2_tag
+      resource: "{{ instance_id }}"
+      state: "{{ 'present' if active else 'absent' }}"
+      tags:
+        sydney.edu.au/resTek/defaultUserPwd: "{{ PASSWORD }}"
+    become: false
+
+  handlers:
+  - name: reload sshd
+    ansible.builtin.service:
+      name: sshd.service
+      state: reloaded
+
+  - name: expire password
+    ansible.builtin.command:
+      cmd: passwd --expire "{{ default_user }}"
