@@ -23,7 +23,7 @@
   tasks:
   - name: generate password
     set_fact:
-      PASSWORD: "{{ lookup('ansible.builtin.password', '/dev/null', seed=inventory_hostname) }}"
+      PASSWORD: "{{ lookup('ansible.builtin.password', '/dev/null') }}"
 
   - block:
     - name: set default user password
