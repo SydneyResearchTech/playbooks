@@ -10,7 +10,7 @@
 
 - name: get upstream dns server(s)
   ansible.builtin.shell:
-    cmd: resolvectl -i{{ ansible_default_ipv4.interface }} dns |sed 's/.*:\s*\([0-9.]*\).*$/\1/'
+    cmd: resolvectl -i{{ ansible_default_ipv4.interface }} dns |sed 's/.*:\s\+\([0-9a-f.: ]*\).*$/\1/'
   register: bind_forwarders
 
 - name: zones

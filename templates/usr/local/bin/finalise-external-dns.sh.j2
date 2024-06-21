@@ -2,6 +2,7 @@
 #
 HOST_IF="{{ ansible_default_ipv4.interface }}"
 HOST_IP="{{ ansible_default_ipv4.address }}"
+HELM='microk8s helm'
 
 # Sanity checks
 [[ -f /etc/bind/tsig-key-fake.sydney.edu.au ]] || { >&2 echo "/etc/bind/tsig-key-fake.sydney.edu.au does not exist."; exit 127; }
@@ -9,10 +10,10 @@ HOST_IP="{{ ansible_default_ipv4.address }}"
 TSIG_SECRET=$(sed -n 's/^\s*secret\s*"\(.*\)".*$/\1/p' /etc/bind/tsig-key-fake.sydney.edu.au)
 TSIG_NAME=$(sed -n 's/^\s*key\s*"\(.*\)".*$/\1/p' /etc/bind/tsig-key-fake.sydney.edu.au)
 
-helm repo add external-dns https://kubernetes-sigs.github.io/external-dns/
-helm repo update
+$HELM repo add external-dns https://kubernetes-sigs.github.io/external-dns/
+$HELM repo update
 
-cat <<EOT |helm upgrade external-dns external-dns/external-dns -i --create-namespace -f - -nexternal-dns
+cat <<EOT |$HELM upgrade external-dns external-dns/external-dns -i --create-namespace -f - -nexternal-dns
 provider:
   name: rfc2136
 extraArgs:
