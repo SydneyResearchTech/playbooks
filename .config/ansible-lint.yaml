@@ -1,0 +1,7 @@
+---
+# .config/ansible-lint.yaml
+#
+profile: null
+exclude_paths:
+  - .cache/
+  - roles/vpn/
