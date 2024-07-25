@@ -1,9 +1,9 @@
 ---
 # handlers file for microk8s
-- name: create tmpfiles
-  ansible.builtin.command:
+- name: Create tmpfiles
+  ansible.builtin.command: # noqa: no-changed-when
     cmd: systemd-tmpfiles --create
 
-- name: restart microk8s
-  ansible.builtin.command:
+- name: Restart microk8s
+  ansible.builtin.command: # noqa: no-changed-when
     cmd: snap restart microk8s

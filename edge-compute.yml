@@ -3,11 +3,12 @@
   become: true
 
   pre_tasks:
-    - block:
-      - name: amazon-efs-utils
-        ansible.builtin.include_tasks: tasks/amazon-efs-utils.yml
+    - name: Install Amazon EFS utils
       when:
         - ansible_system_vendor == "Amazon EC2"
+      block:
+        - name: Include amazon-efs-utils
+          ansible.builtin.include_tasks: tasks/amazon-efs-utils.yml
 
   roles:
     - role: microk8s

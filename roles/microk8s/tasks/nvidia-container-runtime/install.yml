@@ -1,10 +1,10 @@
-- name: install nvidia-container-toolkit
+- name: Install nvidia-container-toolkit
   ansible.builtin.package:
     name:
       - nvidia-container-toolkit
     state: present
 
-- name: update containerd
+- name: Update containerd
   ansible.builtin.blockinfile:
     backup: true
     block: |
@@ -16,4 +16,4 @@
     path: /var/snap/microk8s/current/args/containerd-template.toml
     state: present
   notify:
-    - restart microk8s
+    - Restart microk8s

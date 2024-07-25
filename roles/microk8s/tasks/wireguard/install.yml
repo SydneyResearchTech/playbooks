@@ -1,4 +1,4 @@
-- name: wireguard install
+- name: Install wireguard
   ansible.builtin.package:
     name: wireguard
     state: present

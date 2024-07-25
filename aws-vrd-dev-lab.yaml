@@ -3,7 +3,8 @@
 # ansible-playbook aws-vrd-dev-lab.yaml -e "{subnet_id: subnet-02d6a89d6f0aee6a8, vpc_id: vpc-0a254c860b07b760a}"
 # NB: AWS_PROFILE environment variable required if not default target account
 #
-- hosts: localhost
+- name: AWS virtual research desktop development lab
+  hosts: localhost
   connection: local
   vars:
     default_keyname: dean.taylor@sydney.edu.au
@@ -12,71 +13,71 @@
       sydney.edu.au/resTek/ansiblePlaybook: amazon-vrd-dev-lab.yaml
 
   pre_tasks:
-  - name: assertions
-    ansible.builtin.assert:
-      fail_msg: Mandatory variable(s) not provided or incorrect format.
-      success_msg: OK
-      that:
-        - subnet_id is defined
-        - vpc_id is defined
+    - name: Assertions
+      ansible.builtin.assert:
+        fail_msg: Mandatory variable(s) not provided or incorrect format.
+        success_msg: OK
+        that:
+          - subnet_id is defined
+          - vpc_id is defined
 
   tasks:
-  - name: get amis
-    amazon.aws.ec2_ami_info:
-      filters:
-        name: ubuntu-jammy-22.04-amd64-server-cvl-desktop-*
-      owners: ["381427642830"]
-    register: amis
-  # - ansible.builtin.debug:
-  #     var: amis
+    - name: Get AMIs
+      amazon.aws.ec2_ami_info:
+        filters:
+          name: ubuntu-jammy-22.04-amd64-server-cvl-desktop-*
+        owners: ["381427642830"]
+      register: amis
+    # - ansible.builtin.debug:
+    #     var: amis
 
-  - name: get virutal-desktop-launch-template.cfn.yml
-    ansible.builtin.uri:
-      return_content: true
-      url: https://raw.githubusercontent.com/SydneyResearchTech/cfn-templates/main/vrd-launch-template.cfn.yml
-    register: cfn_vrd_launch_template
+    - name: Get virutal-desktop-launch-template.cfn.yml
+      ansible.builtin.uri:
+        return_content: true
+        url: https://raw.githubusercontent.com/SydneyResearchTech/cfn-templates/main/vrd-launch-template.cfn.yml
+      register: cfn_vrd_launch_template
 
-  - name: generate password
-    set_fact:
-      PASSWORD: "{{ lookup('ansible.builtin.password', '/dev/null', seed=inventory_hostname) }}"
+    - name: Generate password
+      ansible.builtin.set_fact:
+        password: "{{ lookup('ansible.builtin.password', '/dev/null', seed=inventory_hostname) }}"
 
-  - name: cloud formation launch template
-    amazon.aws.cloudformation:
-      capabilities: ["CAPABILITY_IAM", "CAPABILITY_NAMED_IAM"]
-      # disable_rollback: false
-      on_create_failure: DELETE
-      profile: public
-      stack_name: "{{ 'restek-vrd-launch-template-' ~ (uuid|default(default_uuid)) }}"
-      state: present
-      tags: "{{ tags_template }}"
-      template_body: "{{ cfn_vrd_launch_template.content }}"
-      template_parameters:
-        DefaultUserPassword: "{{ password|default('') }}"
-        ImageId: "{{ amis.images[-1].image_id }}"
-        InstanceType: g4dn.xlarge
-        KeyName: "{{ keyname|default(default_keyname) }}"
-        SubnetId: "{{ subnet_id }}"
-        VpcId: "{{ vpc_id }}"
-    when:
-      - cfn_vrd_launch_template.status == 200
+    - name: Cloudformation launch template
+      amazon.aws.cloudformation:
+        capabilities: ["CAPABILITY_IAM", "CAPABILITY_NAMED_IAM"]
+        # disable_rollback: false
+        on_create_failure: DELETE
+        profile: public
+        stack_name: "{{ 'restek-vrd-launch-template-' ~ (uuid|default(default_uuid)) }}"
+        state: present
+        tags: "{{ tags_template }}"
+        template_body: "{{ cfn_vrd_launch_template.content }}"
+        template_parameters:
+          DefaultUserPassword: "{{ password | default('') }}"
+          ImageId: "{{ amis.images[-1].image_id }}"
+          InstanceType: g4dn.xlarge
+          KeyName: "{{ keyname | default(default_keyname) }}"
+          SubnetId: "{{ subnet_id }}"
+          VpcId: "{{ vpc_id }}"
+      when:
+        - cfn_vrd_launch_template.status == 200
 
-  - name: get vrd-dev.cfn.yml
-    ansible.builtin.uri:
-      return_content: true
-      url: https://raw.githubusercontent.com/SydneyResearchTech/cfn-templates/main/vrd-dev.cfn.yml
-    register: cfn_vrd_dev
+    - name: Get vrd-dev.cfn.yml
+      ansible.builtin.uri:
+        return_content: true
+        url: https://raw.githubusercontent.com/SydneyResearchTech/cfn-templates/main/vrd-dev.cfn.yml
+      register: cfn_vrd_dev
 
-  - name: deploy VRD development environment
-    amazon.aws.cloudformation:
-      capabilities: ["CAPABILITY_IAM", "CAPABILITY_NAMED_IAM"]
-      disable_rollback: false
-      on_create_failure: DELETE
-      profile: public
-      stack_name: "{{ 'restek-vrd-dev-env-' ~ (uuid|default(default_uuid)) }}"
-      state: present
-      tags: "{{ tags_template }}"
-      template_body: "{{ cfn_vrd_launch_template.content }}"
-      template_parameters: {}
-    when:
-      - cfn_vrd_launch_template.status == 200
-      - 0 > 1
+    - name: Deploy VRD development environment
+      amazon.aws.cloudformation:
+        capabilities: ["CAPABILITY_IAM", "CAPABILITY_NAMED_IAM"]
+        disable_rollback: false
+        on_create_failure: DELETE
+        profile: public
+        stack_name: "{{ 'restek-vrd-dev-env-' ~ (uuid|default(default_uuid)) }}"
+        state: present
+        tags: "{{ tags_template }}"
+        template_body: "{{ cfn_vrd_launch_template.content }}"
+        template_parameters: {}
+      when:
+        - cfn_vrd_launch_template.status == 200
+        - 0 > 1

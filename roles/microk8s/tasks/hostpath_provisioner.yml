@@ -1,7 +1,8 @@
-- name: hostpath storage classes ...
-  ansible.builtin.shell:
+- name: Hostpath storage classes ...
+  ansible.builtin.shell: # noqa: no-changed-when
     cmd: |
-      microk8s kubectl apply -f - <<EOT
+      set -o pipefail
+      cat <<EOT | microk8s kubectl apply -f -
       apiVersion: storage.k8s.io/v1
       kind: StorageClass
       metadata:
@@ -12,4 +13,5 @@
         pvDir: {{ item.path }}
       volumeBindingMode: WaitForFirstConsumer
       EOT
+    executable: /bin/bash
   with_items: "{{ microk8s_hostpaths }}"

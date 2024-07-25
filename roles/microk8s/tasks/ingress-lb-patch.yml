@@ -1,8 +1,9 @@
 # roles/microk8s/tasks/ingress-lb-patch.yml
 #
-- name: ingress service
-  ansible.builtin.shell:
+- name: Ingress service
+  ansible.builtin.shell: # noqa: no-changed-when
     cmd: |
+      set -o pipefail
       cat <<EOT |microk8s kubectl apply -f -
         apiVersion: v1
         kind: Service
@@ -23,10 +24,13 @@
             port: 443
             targetPort: 443
       EOT
+    executable: /bin/bash
 
-- name: ingress IP via LB
-  ansible.builtin.shell:
+- name: Ingress IP via LB
+  ansible.builtin.shell: # noqa: no-changed-when
     cmd: |
+      set -o pipefail
       microk8s kubectl -ningress get daemonset nginx-ingress-microk8s-controller -o yaml \
       |sed -e 's|- --publish-status-address=.*|- --publish-service=$(POD_NAMESPACE)/ingress|' \
       |microk8s kubectl apply -f -
+    executable: /bin/bash

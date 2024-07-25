@@ -1,41 +1,42 @@
 ---
 # tasks file for microk8s
 #
-- name: apt update
+- name: Apt update
   ansible.builtin.apt:
     cache_valid_time: 86400
     update_cache: true
   when:
     - "'Debian' in ansible_os_family"
 
-- name: wireguard pre-req. for Calico
+- name: Wireguard pre-req. for Calico
   ansible.builtin.include_tasks:
     file: "{{ item }}"
   with_first_found:
     - files:
-      - wireguard/install-{{ ansible_distribution }}-{{ ansible_distribution_version }}.yml
-      - wireguard/install.yml
+        - wireguard/install-{{ ansible_distribution }}-{{ ansible_distribution_version }}.yml
+        - wireguard/install.yml
 
-- name: snapd install
+- name: Snapd install
   ansible.builtin.include_tasks:
     file: "{{ item }}"
   with_first_found:
     - files:
-      - snapd/install-{{ ansible_distribution }}-{{ ansible_distribution_version }}.yml
-      - snapd/install-{{ ansible_distribution }}.yml
-      - snapd/install.yml
+        - snapd/install-{{ ansible_distribution }}-{{ ansible_distribution_version }}.yml
+        - snapd/install-{{ ansible_distribution }}.yml
+        - snapd/install.yml
 
-- name: microk8s install
+- name: Microk8s install
   ansible.builtin.command:
     cmd: snap install microk8s --classic
     creates: /snap/microk8s
 
-- name: microk8s status
-  ansible.builtin.shell:
+- name: Microk8s status
+  ansible.builtin.command:
     cmd: microk8s status --format short --wait-ready --timeout 60
   register: microk8s_status
+  changed_when: "'microk8s is running' not in microk8s_status.stdout"
 
-- name: /etc/profile.d/microk8s.sh
+- name: Create /etc/profile.d/microk8s.sh
   ansible.builtin.copy:
     dest: /etc/profile.d/microk8s.sh
     group: root
@@ -43,25 +44,26 @@
     owner: root
     src: files/profile.sh
 
-- block:
-    - name: nvidia-container-runtime repo
-      ansible.builtin.include_tasks: nvidia-container-runtime/{{ ansible_os_family }}.yml
-
-    - name: nvidia-container-runtime install
-      ansible.builtin.include_tasks: nvidia-container-runtime/install.yml
+- name: NVIDIA container runtime
   when:
     - "'gpu' in microk8s_enable"
+  block:
+    - name: Add nvidia-container-runtime repo
+      ansible.builtin.include_tasks: nvidia-container-runtime/{{ ansible_os_family }}.yml
 
-- name: /usr/local/bin/metallb-range.py
+    - name: Install nvidia-container-runtime
+      ansible.builtin.include_tasks: nvidia-container-runtime/install.yml
+
+- name: Create /usr/local/bin/metallb-range.py
   ansible.builtin.copy:
     dest: /usr/local/bin/metallb-range.py
     group: root
-    mode: 0755
+    mode: "0755"
     owner: root
     src: files/metallb-range.py
 
-- name: microk8s enable ...
-  ansible.builtin.shell:
+- name: Microk8s enable ...
+  ansible.builtin.shell: # noqa: no-changed-when
     cmd: |
       ADDON="{{ item }}"
       if [[ $ADDON == gpu ]]; then
@@ -75,22 +77,22 @@
       fi
   with_items:
     - "{{ microk8s_enable }}"
-    - "{{ ((microk8s_hostpaths|length>0) and (microk8s_enable|select('search','hostpath-storage')|length==0))|ternary(['hostpath-storage'],[]) }}"
+    - "{{ ((microk8s_hostpaths | length > 0) and (microk8s_enable | select('search', 'hostpath-storage') | length == 0)) | ternary(['hostpath-storage'], []) }}"
   when:
-    - "microk8s_status.stdout_lines|select('search',('core/%s: disabled'|format((item|split(':'))[0])))|length>0"
+    - "microk8s_status.stdout_lines | select('search', ('core/%s: disabled' | format((item|split(':'))[0]))) | length > 0"
 
-- name: ingress service
+- name: Ingress service
   ansible.builtin.import_tasks: ingress-lb-patch.yml
   when:
     - "'metallb' in microk8s_enable"
 
-- name: microk8s-hostpath storage class
+- name: Storage class microk8s-hostpath
   ansible.builtin.import_tasks: hostpath_provisioner.yml
   when:
     - "microk8s_hostpaths|length>0"
 
-- name: local-storage class
-  ansible.builtin.shell:
+- name: Class local-storage
+  ansible.builtin.shell: # noqa: risky-shell-pipe
     cmd: |
       cat <<EOT |microk8s kubectl apply -f -
       apiVersion: storage.k8s.io/v1
@@ -101,11 +103,13 @@
       reclaimPolicy: Delete
       volumeBindingMode: WaitForFirstConsumer
       EOT
+  register: sc_local_storage
+  changed_when: "'storageclass.storage.k8s.io/local-storage unchanged' not in sc_local_storage.stdout"
 
-- name: local-storage
+- name: Manage local-storage
   ansible.builtin.import_tasks: local-storage.yml
 
-- name: calicoctl
+- name: Calicoctl
   ansible.builtin.import_tasks: calicoctl.yml
   when:
     - "microk8s_calicoctl_version|length>0"

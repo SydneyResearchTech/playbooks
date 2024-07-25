@@ -1,4 +1,4 @@
 - name: .kube/config
-  ansible.builtin.shell:
+  ansible.builtin.shell: # noqa: no-changed-when
     cmd: |
       [ -f ${HOME}/.kube/config ] || microk8s config >${HOME}/.kube/config

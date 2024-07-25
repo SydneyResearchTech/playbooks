@@ -5,10 +5,10 @@
       L /run/systemd/resolve/resolv.conf - - - - /etc/resolv.conf
     dest: /etc/tmpfiles.d/microk8s.conf
     group: root
-    mode: 0644
+    mode: "0644"
     owner: root
   notify:
-    - create tmpfiles
+    - Create tmpfiles
 
-- name: default CentOS install
+- name: Default CentOS install
   ansible.builtin.include_tasks: snap/install-{{ ansible_distribution }}.yml

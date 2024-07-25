@@ -1,2 +1,6 @@
 .*.swp
 /tmp/
+__pycache__/
+/tasks/postfix.md
+/tasks/postfix.yml
+/roles/vpn/

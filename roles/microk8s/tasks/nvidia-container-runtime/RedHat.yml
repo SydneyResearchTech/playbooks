@@ -1,6 +1,6 @@
-- name: nvidia-container-toolkit repository
+- name: Add nvidia-container-toolkit repository
   ansible.builtin.yum_repository:
-    base_url: https://nvidia.github.io/libnvidia-container/stable/rpm/$basearch
+    baseurl: https://nvidia.github.io/libnvidia-container/stable/rpm/$basearch
     description: nvidia-container-toolkit
     enabled: true
     file: nvidia-container-toolkit

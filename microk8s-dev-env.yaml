@@ -1,13 +1,14 @@
-- name: microk8s development environment
+- name: Microk8s development environment
   hosts: "{{ target|default('all') }}"
   become: true
 
   pre_tasks:
-    - block:
-      - name: amazon-efs-utils
-        ansible.builtin.include_tasks: tasks/amazon-efs-utils.yml
+    - name: Install Amazon EFS utils
       when:
         - ansible_system_vendor == "Amazon EC2"
+      block:
+        - name: Include amazon-efs-utils
+          ansible.builtin.include_tasks: tasks/amazon-efs-utils.yml
 
   roles:
     - role: microk8s
@@ -15,88 +16,98 @@
       when: named_enabled
 
   tasks:
-    - name: /etc/docker exists
+    - name: Does /etc/docker exist?
       ansible.builtin.stat:
         path: /etc/docker
       register: is_docker
-    - block:
-      - name: /etc/docker/daemon.json create
-        ansible.builtin.copy:
-          content: "{}"
-          dest: /etc/docker/daemon.json
-          force: false
 
-      - name: /etc/docker/daemon.json read
-        ansible.builtin.slurp:
-          src: /etc/docker/daemon.json
-        register: daemon_json
-
-      - name: /etc/docker/daemon.json
-        # https://github.com/particledecay/ansible-jsonpatch
-        json_patch:
-          src: /etc/docker/daemon.json
-          operations:
-            - op: add
-              path: "/insecure-registries"
-              value: []
-          pretty: true
-          create: true
-          create_type: object
-        when:
-          - (daemon_json['content']|b64decode|from_json)['insecure-registries'] is not defined
-
-      - name: /etc/docker/daemon.json
-        json_patch:
-          src: /etc/docker/daemon.json
-          operations:
-            - op: add
-              path: "/insecure-registries/-"
-              value: "localhost:32000"
-          pretty: true
-          create: true
-          create_type: object
-        when:
-          - (daemon_json['content']|b64decode|from_json)['insecure-registries'] is not defined
-            or (daemon_json['content']|b64decode|from_json)['insecure-registries'] is not contains('localhost:32000')
+    - name: Configure Docker daemon
       when:
         - is_docker.stat.isdir is defined and is_docker.stat.isdir
+      block:
+        - name: Create /etc/docker/daemon.json
+          ansible.builtin.copy:
+            content: "{}"
+            dest: /etc/docker/daemon.json
+            force: false
+            mode: "0644"
 
-    - block:
-      - name: /usr/local/bin/finalise-external-dns.sh
-        ansible.builtin.template:
-          dest: /usr/local/bin/finalise-external-dns.sh
-          lstrip_blocks: true
-          mode: "0755"
-          src: templates/usr/local/bin/finalise-external-dns.sh.j2
+        - name: Read /etc/docker/daemon.json
+          ansible.builtin.slurp:
+            src: /etc/docker/daemon.json
+          register: daemon_json
 
-      - block:
-        - name: /etc/resolv.conf is symlink?
-          ansible.builtin.stat:
-            path: /etc/resolv.conf
-          register: resolv_conf
+        - name: Patch /etc/docker/daemon.json
+          # https://github.com/particledecay/ansible-jsonpatch
+          json_patch:
+            src: /etc/docker/daemon.json
+            operations:
+              - op: add
+                path: "/insecure-registries"
+                value: []
+            pretty: true
+            create: true
+            create_type: object
+          when:
+            - (daemon_json['content']|b64decode|from_json)['insecure-registries'] is not defined
 
-        - block:
-          - name: unlink /etc/resolv.conf from systemd-resolved
-            ansible.builtin.command:
-              cmd: unlink /etc/resolv.conf
+        - name: Patch /etc/docker/daemon.json
+          json_patch:
+            src: /etc/docker/daemon.json
+            operations:
+              - op: add
+                path: "/insecure-registries/-"
+                value: "localhost:32000"
+            pretty: true
+            create: true
+            create_type: object
+          when:
+            - (daemon_json['content']|b64decode|from_json)['insecure-registries'] is not defined
+              or (daemon_json['content']|b64decode|from_json)['insecure-registries'] is not contains('localhost:32000')
 
-          - name: copy /run/systemd/resolve/stub-resolv.conf to /etc/resolv.conf
-            ansible.builtin.shell:
-              cmd: sed -n -e '/^#/!p' /run/systemd/resolve/stub-resolv.conf >/etc/resolv.conf
-          when: resolv_conf.stat.islnk
-
-        - name: set nameserver
-          ansible.builtin.lineinfile:
-            line: nameserver {{ ansible_default_ipv4.address }}
-            path: /etc/resolv.conf
-            search_string: nameserver
-
-        - name: microk8s set nameserver
-          ansible.builtin.shell:
-            cmd: >
-              microk8s kubectl -n kube-system get configmap/coredns -oyaml
-              | sed 's/forward \. .*$/forward . {{ ansible_default_ipv4.address }}/'
-              | microk8s kubectl apply -f -
-        tags: [bind,named,resolvd]
+    - name: Configure host DNS resolve
       when:
         - named_enabled
+      block:
+        - name: Create /usr/local/bin/finalise-external-dns.sh
+          ansible.builtin.template:
+            dest: /usr/local/bin/finalise-external-dns.sh
+            lstrip_blocks: true
+            mode: "0755"
+            src: templates/usr/local/bin/finalise-external-dns.sh.j2
+
+        - name: Configure client DNS resolution
+          tags: [bind, named, resolvd]
+          block:
+            - name: Is /etc/resolv.conf a symlink?
+              ansible.builtin.stat:
+                path: /etc/resolv.conf
+              register: resolv_conf
+
+            - name: Update /etc/resolv.conf
+              when: resolv_conf.stat.islnk
+              block:
+                - name: Unlink /etc/resolv.conf from systemd-resolved
+                  ansible.builtin.command:
+                    cmd: unlink /etc/resolv.conf
+                    removes: /etc/resolv.conf
+
+                - name: Copy /run/systemd/resolve/stub-resolv.conf to /etc/resolv.conf
+                  ansible.builtin.shell: # noqa: command-instead-of-module
+                    cmd: sed -n -e '/^#/!p' /run/systemd/resolve/stub-resolv.conf >/etc/resolv.conf
+                    creates: /etc/resolv.conf
+
+            - name: Set nameserver
+              ansible.builtin.lineinfile:
+                line: nameserver {{ ansible_default_ipv4.address }}
+                path: /etc/resolv.conf
+                search_string: nameserver
+
+            - name: Microk8s set nameserver
+              ansible.builtin.shell: # noqa: no-changed-when
+                cmd: |
+                  set -o pipefail
+                  microk8s kubectl -n kube-system get configmap/coredns -oyaml \
+                  | sed 's/forward \. .*$/forward . {{ ansible_default_ipv4.address }}/' \
+                  | microk8s kubectl apply -f -
+                executable: /bin/bash

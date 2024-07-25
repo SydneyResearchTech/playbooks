@@ -2,19 +2,19 @@
 # defaults file for microk8s
 ## \param microk8s_enable []string addons to enable `microk8s status` lists available options.
 microk8s_enable:
-- cert-manger
-- dns
-- ha-cluster
-- helm3
-- ingress
-- metallb
-- observability
-- rbac
-- registry
+  - cert-manger
+  - dns
+  - ha-cluster
+  - helm3
+  - ingress
+  - metallb
+  - observability
+  - rbac
+  - registry
 
 ## \param microk8s_calicoctl_version string calicoctl version to install on host.
 microk8s_calicoctl_version: ""
-#microk8s_calicoctl_version: v3.25.1
+# microk8s_calicoctl_version: v3.25.1
 
 ## \param microk8s_storageclass_default string not currently used
 microk8s_storageclass_default: ""
@@ -35,12 +35,13 @@ microk8s_hostpaths: []
 ## \param microk8s_local_storage []object Persistent volume(s) for local host directory path
 ## \param microk8s_local_storage.[].path string Host directory path
 ## \param microk8s_local_storage.[].age string Directory cleanup time period
-## \param microk8s_local_storage.[].claimRef object [Reserving a PersistentVolume](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#reserving-a-persistentvolume)
+## \param microk8s_local_storage.[].claimRef object
+##   [Reserving a PersistentVolume](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#reserving-a-persistentvolume)
 microk8s_local_storage: []
 # - path: /scratch/cryosparc
 #   age: 1w
 
 ## \param microk8s_metallb_range string Load balancer IP address ranges
-microk8s_metallb_range: "{{ ansible_default_ipv4.network+'/'+ansible_default_ipv4.prefix }}"
+microk8s_metallb_range: "{{ ansible_default_ipv4.network + '/' + ansible_default_ipv4.prefix }}"
 # https://prometheus.io/docs/guides/node-exporter/
 microk8s_node_exporter_metrics_enabled: false

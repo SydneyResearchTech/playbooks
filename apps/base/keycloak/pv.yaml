@@ -17,11 +17,11 @@ spec:
   nodeAffinity:
     required:
       nodeSelectorTerms:
-      - matchExpressions:
-        - key: kubernetes.io/hostname
-          operator: In
-          values:
-          - ip-10-0-19-23
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - ip-10-0-19-23
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

@@ -1,17 +1,18 @@
 ---
 # role/named/tasks/configure_zone.yml
 #
-- name: tsig key file exists?
+- name: Does tsig key file exist?
   ansible.builtin.stat:
     path: /etc/bind/tsig-key-{{ dns_zone }}
   register: tsig_key
 
-- name: tsig-keygen
+- name: Run tsig-keygen
   ansible.builtin.shell:
     cmd: tsig-keygen -a hmac-sha256 tsig-key-{{ dns_zone }} >/etc/bind/tsig-key-{{ dns_zone }}
+    creates: /etc/bind/tsig-key-{{ dns_zone }}
   when: not tsig_key.stat.exists
 
-- name: /etc/bind/named.conf.ansible
+- name: Create /etc/bind/named.conf.ansible
   ansible.builtin.copy:
     content: |
       include "/etc/bind/tsig-key-{{ dns_zone }}";
@@ -22,11 +23,12 @@
         update-policy { grant tsig-key-{{ dns_zone }} zonesub ANY; };
       };
     dest: /etc/bind/named.conf.ansible
-    #validate: named-checkzone
+    mode: "0644"
+    # validate: named-checkzone
   notify:
-    - reload named
+    - Reload named
 
-- name: /var/cache/bind/db
+- name: Configure /var/cache/bind/db
   ansible.builtin.copy:
     content: |
       $TTL 60
@@ -35,7 +37,7 @@
     dest: /var/cache/bind/db.{{ dns_zone }}
     force: false
     group: bind
-    mode: 0644
+    mode: "0644"
     owner: bind
   notify:
-    - reload named
+    - Reload named

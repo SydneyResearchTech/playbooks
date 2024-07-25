@@ -1,5 +1,5 @@
 # https://www.gnu.org/software/wget/manual/html_node/Proxies.html
-- name: http_proxy settings
+- name: Configure http_proxy
   ansible.builtin.blockinfile:
     block: |
       http_proxy={{ http_proxy }}
