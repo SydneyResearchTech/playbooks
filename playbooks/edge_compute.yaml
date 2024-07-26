@@ -1,6 +1,8 @@
 - name: Edge compute management
   hosts: "{{ target|default('all') }}"
   become: true
+  collections:
+    - sydneyresearchtech.infrastructure
 
   pre_tasks:
     - name: Install Amazon EFS utils

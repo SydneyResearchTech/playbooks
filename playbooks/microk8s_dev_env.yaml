@@ -1,6 +1,8 @@
 - name: Microk8s development environment
   hosts: "{{ target|default('all') }}"
   become: true
+  collections:
+    - sydneyresearchtech.infrastructure
 
   pre_tasks:
     - name: Install Amazon EFS utils
@@ -13,7 +15,8 @@
   roles:
     - role: microk8s
     - role: named
-      when: named_enabled
+      when:
+        - named_enabled | default(false) | bool
 
   tasks:
     - name: Does /etc/docker exist?
@@ -67,7 +70,7 @@
 
     - name: Configure host DNS resolve
       when:
-        - named_enabled
+        - named_enabled | default(false) | bool
       block:
         - name: Create /usr/local/bin/finalise-external-dns.sh
           ansible.builtin.template:

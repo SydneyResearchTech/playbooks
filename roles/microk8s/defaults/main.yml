@@ -7,7 +7,6 @@ microk8s_enable:
   - ha-cluster
   - helm3
   - ingress
-  - metallb
   - observability
   - rbac
   - registry

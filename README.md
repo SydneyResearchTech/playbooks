@@ -35,11 +35,13 @@ Ref.
 # test ansible playbook
 ansible-pull -clocal -i,localhost --check --diff \
  -U https://github.com/SydneyResearchTech/playbooks.git \
- [playbooks/playbook.yml ...]
+ -d ~/.ansible/collections/ansible_collections/sydneyresearchtech/infrastructure \
+ [sydneyresearchtech.infrastructure.playbook ...]
 
 # run ansible playbook
 ansible-pull -clocal -i,localhost \
  -U https://github.com/SydneyResearchTech/playbooks.git \
+ -d ~/.ansible/collections/ansible_collections/sydneyresearchtech/infrastructure \
  [playbooks/playbook.yml ...]
 ```
 
@@ -47,7 +49,7 @@ ansible-pull -clocal -i,localhost \
 
 | Playbook | Purpose | Notes |
 | -------- | ------- | ----- |
-| microk8s-dev-env.yaml | Kubernetes cluster for development. Incorporating DNS resolution and configuration management, Certificate management, Load balancer and Ingress controller. | Uses include OIDC and other authentication integration work. Simulation of full disparate service. Includes full DNS provider functionality. |
+| microk8s_dev_env.yaml | Kubernetes cluster for development. Incorporating DNS resolution and configuration management, Certificate management, Load balancer and Ingress controller. | Uses include OIDC and other authentication integration work. Simulation of full disparate service. Includes full DNS provider functionality. |
 
 ## Roles
 
@@ -55,38 +57,6 @@ ansible-pull -clocal -i,localhost \
 | ---- | ------- | ----- |
 | microk8s | Install and configure MicroK8s on a single node. |
 
-# Interum steps until fully automated
-
-## microk8s external-dns
-
-If you wish to select your own LB IP range, otherwise skip this step.
-
-```bash
-snap install microk8s --classic
-
-# Minimal microk8s install add-ons
-microk8s enable metallb:<IP_RANGE>
-```
-
-```bash
-# test ansible playbook
-ansible-pull -clocal -i,localhost --check --diff \
- -U https://github.com/SydneyResearchTech/playbooks.git \
- playbooks/microk8s-dev-env.yaml
-
-# run ansible playbook for localhost
-ansible-pull -clocal -i,localhost \
- -U https://github.com/SydneyResearchTech/playbooks.git \
- playbooks/microk8s-dev-env.yaml
-
-# WORKAROUND. finishes the external dns configuration until this fully integrated.
-finalise-external-dns.sh
-
-# run ansible playbook from jump host, replace <hostname> with target hostname
-ansible-pull -i,<hostname> \
- -U https://github.com/SydneyResearchTech/playbooks.git \
- playbooks/microk8s-dev-env.yaml
-```
 
 For more complex deployments you will need to pre-configure an inventory on your ansible run host.
 If you want the playbook to target a group of hosts, once your inventory is configured you can perform the following.
@@ -102,7 +72,8 @@ Ansible-pull will not use the local group_vars or host_vars settings when an inv
 ```bash
 ansible-pull -i<PATH_TO_INVENTORY_FILE_OR_DIRECTORY> -e 'target=<GROUP_NAME>' \
  -U https://github.com/SydneyResearchTech/playbooks.git \
- playbooks/microk8s-dev-env.yaml
+ -d ~/.ansible/collections/ansible_collections/sydneyresearchtech/infrastructure \
+ sydneyresearchtech.infrastructure.edge_compute
 
 # OR add a more comprehensive configuration that includes the inventory path
 cat <<EOT |sudo tee -a /etc/ansible/ansible.cfg
@@ -147,5 +118,31 @@ EOT
 # Ansible run
 ansible-pull -e 'target=<GROUP_NAME>' \
  -U https://github.com/SydneyResearchTech/playbooks.git \
- playbooks/microk8s-dev-env.yaml
+ -d ~/.ansible/collections/ansible_collections/sydneyresearchtech/infrastructure \
+ sydneyresearchtech.infrastructure.edge_compute
+```
+
+# Microk8s development environment ONLY
+
+```bash
+# test ansible playbook
+ansible-pull -clocal -i,localhost --check --diff \
+ -U https://github.com/SydneyResearchTech/playbooks.git \
+ -d ~/.ansible/collections/ansible_collections/sydneyresearchtech/infrastructure \
+ sydneyresearchtech.infrastructure.microk8s_dev_env
+
+# run ansible playbook for localhost
+ansible-pull -clocal -i,localhost \
+ -U https://github.com/SydneyResearchTech/playbooks.git \
+ -d ~/.ansible/collections/ansible_collections/sydneyresearchtech/infrastructure \
+ sydneyresearchtech.infrastructure.microk8s_dev_env
+
+# WORKAROUND. finishes the external dns configuration until this fully integrated.
+finalise-external-dns.sh
+
+# run ansible playbook from jump host, replace <hostname> with target hostname
+ansible-pull -i,<hostname> \
+ -U https://github.com/SydneyResearchTech/playbooks.git \
+ -d ~/.ansible/collections/ansible_collections/sydneyresearchtech/infrastructure \
+ sydneyresearchtech.infrastructure.microk8s_dev_env
 ```
