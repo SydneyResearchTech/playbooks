@@ -1,5 +1,6 @@
-# playbooks
-Ansible playbooks for ansible-pull operation
+# Ansible Collection - sydneyresearchtech.infrastructure
+
+# Ansible pull
 
 ## Install Ansible.
 
@@ -34,12 +35,12 @@ Ref.
 # test ansible playbook
 ansible-pull -clocal -i,localhost --check --diff \
  -U https://github.com/SydneyResearchTech/playbooks.git \
- [playbook.yml ...]
+ [playbooks/playbook.yml ...]
 
 # run ansible playbook
 ansible-pull -clocal -i,localhost \
  -U https://github.com/SydneyResearchTech/playbooks.git \
- [playbook.yml ...]
+ [playbooks/playbook.yml ...]
 ```
 
 ## Playbooks
@@ -71,12 +72,12 @@ microk8s enable metallb:<IP_RANGE>
 # test ansible playbook
 ansible-pull -clocal -i,localhost --check --diff \
  -U https://github.com/SydneyResearchTech/playbooks.git \
- microk8s-dev-env.yaml
+ playbooks/microk8s-dev-env.yaml
 
 # run ansible playbook for localhost
 ansible-pull -clocal -i,localhost \
  -U https://github.com/SydneyResearchTech/playbooks.git \
- microk8s-dev-env.yaml
+ playbooks/microk8s-dev-env.yaml
 
 # WORKAROUND. finishes the external dns configuration until this fully integrated.
 finalise-external-dns.sh
@@ -84,7 +85,7 @@ finalise-external-dns.sh
 # run ansible playbook from jump host, replace <hostname> with target hostname
 ansible-pull -i,<hostname> \
  -U https://github.com/SydneyResearchTech/playbooks.git \
- microk8s-dev-env.yaml
+ playbooks/microk8s-dev-env.yaml
 ```
 
 For more complex deployments you will need to pre-configure an inventory on your ansible run host.
@@ -101,7 +102,7 @@ Ansible-pull will not use the local group_vars or host_vars settings when an inv
 ```bash
 ansible-pull -i<PATH_TO_INVENTORY_FILE_OR_DIRECTORY> -e 'target=<GROUP_NAME>' \
  -U https://github.com/SydneyResearchTech/playbooks.git \
- microk8s-dev-env.yaml
+ playbooks/microk8s-dev-env.yaml
 
 # OR add a more comprehensive configuration that includes the inventory path
 cat <<EOT |sudo tee -a /etc/ansible/ansible.cfg
@@ -111,9 +112,11 @@ inventory = /etc/ansible/hosts.yml
 ssh_args = -o StrictHostKeyChecking=accept-new -o ControlMaster=auto -o ControlPersist=60s -o ControlPath=/tmp/%r@%h:%p
 EOT
 
+# Ansible configuration file path environment variable override
 echo 'export ANSIBLE_CONFIG=/etc/ansible/ansible.cfg' |sudo tee /etc/profile.d/ansible.sh
 . /etc/profile.d/ansible.sh
 
+# Inventory file
 cat <<EOT |sudo tee /etc/ansible/hosts.yml
 all:
   children:
@@ -125,6 +128,7 @@ all:
       ansible_connection: local
 EOT
 
+# Microk8s local configuration
 sudo mkdir -p /etc/ansible/group_vars
 
 cat <<EOT |sudo /etc/ansible/group_vars/microk8s.yml
@@ -140,7 +144,8 @@ microk8s_enable:
   - rbac
 EOT
 
+# Ansible run
 ansible-pull -e 'target=<GROUP_NAME>' \
  -U https://github.com/SydneyResearchTech/playbooks.git \
- microk8s-dev-env.yaml
+ playbooks/microk8s-dev-env.yaml
 ```

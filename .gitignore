@@ -1,6 +1,5 @@
 .*.swp
 /tmp/
 __pycache__/
-/tasks/postfix.md
-/tasks/postfix.yml
+/playbooks/tasks/postfix.*
 /roles/vpn/

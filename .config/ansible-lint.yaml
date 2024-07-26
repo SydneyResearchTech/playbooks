@@ -1,7 +1,10 @@
 ---
 # .config/ansible-lint.yaml
-#
 profile: null
+
 exclude_paths:
   - .cache/
   - roles/vpn/
+
+skip_list:
+  - schema[changelog]
