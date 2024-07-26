@@ -36,13 +36,13 @@ Ref.
 ansible-pull -clocal -i,localhost --check --diff \
  -U https://github.com/SydneyResearchTech/playbooks.git \
  -d ~/.ansible/collections/ansible_collections/sydneyresearchtech/infrastructure \
- [sydneyresearchtech.infrastructure.playbook ...]
+ [playbooks/PLAYBOOK_NAME.yaml ...]
 
 # run ansible playbook
 ansible-pull -clocal -i,localhost \
  -U https://github.com/SydneyResearchTech/playbooks.git \
  -d ~/.ansible/collections/ansible_collections/sydneyresearchtech/infrastructure \
- [playbooks/playbook.yml ...]
+ [playbooks/PLAYBOOK_NAME.yaml ...]
 ```
 
 ## Playbooks
@@ -73,7 +73,7 @@ Ansible-pull will not use the local group_vars or host_vars settings when an inv
 ansible-pull -i<PATH_TO_INVENTORY_FILE_OR_DIRECTORY> -e 'target=<GROUP_NAME>' \
  -U https://github.com/SydneyResearchTech/playbooks.git \
  -d ~/.ansible/collections/ansible_collections/sydneyresearchtech/infrastructure \
- sydneyresearchtech.infrastructure.edge_compute
+ playbooks/edge_compute.yaml
 
 # OR add a more comprehensive configuration that includes the inventory path
 cat <<EOT |sudo tee -a /etc/ansible/ansible.cfg
@@ -115,11 +115,17 @@ microk8s_enable:
   - rbac
 EOT
 
-# Ansible run
-ansible-pull -e 'target=<GROUP_NAME>' \
+# Run playbook TEST
+ansible-pull -e 'target=microk8s' --check --diff \
  -U https://github.com/SydneyResearchTech/playbooks.git \
  -d ~/.ansible/collections/ansible_collections/sydneyresearchtech/infrastructure \
- sydneyresearchtech.infrastructure.edge_compute
+ playbooks/edge_compute.yaml
+
+# Run playbook
+ansible-pull -e 'target=microk8s' --check --diff \
+ -U https://github.com/SydneyResearchTech/playbooks.git \
+ -d ~/.ansible/collections/ansible_collections/sydneyresearchtech/infrastructure \
+ playbooks/edge_compute.yaml
 ```
 
 # Microk8s development environment ONLY
@@ -129,13 +135,13 @@ ansible-pull -e 'target=<GROUP_NAME>' \
 ansible-pull -clocal -i,localhost --check --diff \
  -U https://github.com/SydneyResearchTech/playbooks.git \
  -d ~/.ansible/collections/ansible_collections/sydneyresearchtech/infrastructure \
- sydneyresearchtech.infrastructure.microk8s_dev_env
+ playbooks/microk8s_dev_env.yaml
 
 # run ansible playbook for localhost
 ansible-pull -clocal -i,localhost \
  -U https://github.com/SydneyResearchTech/playbooks.git \
  -d ~/.ansible/collections/ansible_collections/sydneyresearchtech/infrastructure \
- sydneyresearchtech.infrastructure.microk8s_dev_env
+ playbooks/microk8s_dev_env.yaml
 
 # WORKAROUND. finishes the external dns configuration until this fully integrated.
 finalise-external-dns.sh
@@ -144,5 +150,5 @@ finalise-external-dns.sh
 ansible-pull -i,<hostname> \
  -U https://github.com/SydneyResearchTech/playbooks.git \
  -d ~/.ansible/collections/ansible_collections/sydneyresearchtech/infrastructure \
- sydneyresearchtech.infrastructure.microk8s_dev_env
+ playbooks/microk8s_dev_env.yaml
 ```
