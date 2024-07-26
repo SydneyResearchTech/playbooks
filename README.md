@@ -1,7 +1,7 @@
 # playbooks
 Ansible playbooks for ansible-pull operation
 
-Install Ansible.
+## Install Ansible.
 
 * [https://docs.ansible.com/ansible/latest/installation_guide/installation_distros.html](https://docs.ansible.com/ansible/latest/installation_guide/installation_distros.html)
 
@@ -12,7 +12,20 @@ sudo add-apt-repository --yes --update ppa:ansible/ansible
 sudo apt install ansible
 ```
 
-Run playbook with `ansible-pull`
+## Prerequisite 
+
+Ref.
+* [Playbook privilege escalation](https://docs.ansible.com/ansible/latest/playbook_guide/playbooks_privilege_escalation.html)
+
+*NB:* Playbooks commonly require elevated privileges to perform tasks. The user account, local and/or remote, used to
+run the playbook would typically be included as an *administrator* via *sudo*. This will allow the playbook to run as both a
+standard user and be able to elevate privilege when required.
+
+```bash
+echo "<ANSIBLE_USER> ALL=(ALL) NOPASSWD:ALL" |sudo tee -a /etc/sudoers.d/ansible-user
+```
+
+## Run playbook with `ansible-pull`
 
 Ref.
 * [ansible-pull](https://docs.ansible.com/ansible/latest/cli/ansible-pull.html)
