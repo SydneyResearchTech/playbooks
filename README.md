@@ -1,4 +1,4 @@
-# Ansible Collection - sydneyresearchtech.infrastructure
+# Ansible Collection - restek.core
 
 # Ansible pull
 
@@ -35,13 +35,13 @@ Ref.
 # test ansible playbook
 ansible-pull -clocal -i,localhost --check --diff \
  -U https://github.com/SydneyResearchTech/playbooks.git \
- -d ~/.ansible/collections/ansible_collections/sydneyresearchtech/infrastructure \
+ -d ~/.ansible/collections/ansible_collections/restek/core \
  [playbooks/PLAYBOOK_NAME.yaml ...]
 
 # run ansible playbook
 ansible-pull -clocal -i,localhost \
  -U https://github.com/SydneyResearchTech/playbooks.git \
- -d ~/.ansible/collections/ansible_collections/sydneyresearchtech/infrastructure \
+ -d ~/.ansible/collections/ansible_collections/restek/core \
  [playbooks/PLAYBOOK_NAME.yaml ...]
 ```
 
@@ -57,6 +57,7 @@ ansible-pull -clocal -i,localhost \
 | ---- | ------- | ----- |
 | microk8s | Install and configure MicroK8s on a single node. |
 
+## Complex deployments
 
 For more complex deployments you will need to pre-configure an inventory on your ansible run host.
 If you want the playbook to target a group of hosts, once your inventory is configured you can perform the following.
@@ -72,7 +73,7 @@ Ansible-pull will not use the local group_vars or host_vars settings when an inv
 ```bash
 ansible-pull -i<PATH_TO_INVENTORY_FILE_OR_DIRECTORY> -e 'target=<GROUP_NAME>' \
  -U https://github.com/SydneyResearchTech/playbooks.git \
- -d ~/.ansible/collections/ansible_collections/sydneyresearchtech/infrastructure \
+ -d ~/.ansible/collections/ansible_collections/restek/core \
  playbooks/edge_compute.yaml
 
 # OR add a more comprehensive configuration that includes the inventory path
@@ -118,13 +119,13 @@ EOT
 # Run playbook TEST
 ansible-pull -e 'target=microk8s' --check --diff \
  -U https://github.com/SydneyResearchTech/playbooks.git \
- -d ~/.ansible/collections/ansible_collections/sydneyresearchtech/infrastructure \
+ -d ~/.ansible/collections/ansible_collections/restek/core \
  playbooks/edge_compute.yaml
 
 # Run playbook
 ansible-pull -e 'target=microk8s' --check --diff \
  -U https://github.com/SydneyResearchTech/playbooks.git \
- -d ~/.ansible/collections/ansible_collections/sydneyresearchtech/infrastructure \
+ -d ~/.ansible/collections/ansible_collections/restek.core \
  playbooks/edge_compute.yaml
 ```
 
@@ -134,13 +135,13 @@ ansible-pull -e 'target=microk8s' --check --diff \
 # test ansible playbook
 ansible-pull -clocal -i,localhost --check --diff \
  -U https://github.com/SydneyResearchTech/playbooks.git \
- -d ~/.ansible/collections/ansible_collections/sydneyresearchtech/infrastructure \
+ -d ~/.ansible/collections/ansible_collections/restek/core \
  playbooks/microk8s_dev_env.yaml
 
 # run ansible playbook for localhost
 ansible-pull -clocal -i,localhost \
  -U https://github.com/SydneyResearchTech/playbooks.git \
- -d ~/.ansible/collections/ansible_collections/sydneyresearchtech/infrastructure \
+ -d ~/.ansible/collections/ansible_collections/restek/core \
  playbooks/microk8s_dev_env.yaml
 
 # WORKAROUND. finishes the external dns configuration until this fully integrated.
@@ -149,6 +150,6 @@ finalise-external-dns.sh
 # run ansible playbook from jump host, replace <hostname> with target hostname
 ansible-pull -i,<hostname> \
  -U https://github.com/SydneyResearchTech/playbooks.git \
- -d ~/.ansible/collections/ansible_collections/sydneyresearchtech/infrastructure \
+ -d ~/.ansible/collections/ansible_collections/restek/core \
  playbooks/microk8s_dev_env.yaml
 ```

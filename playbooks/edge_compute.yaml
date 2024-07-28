@@ -1,8 +1,6 @@
 - name: Edge compute management
   hosts: "{{ target|default('all') }}"
   become: true
-  collections:
-    - sydneyresearchtech.infrastructure
 
   pre_tasks:
     - name: Install Amazon EFS utils
@@ -13,6 +11,6 @@
           ansible.builtin.include_tasks: tasks/amazon-efs-utils.yml
 
   roles:
-    - role: microk8s
+    - role: restek.core.microk8s
 
   tasks: []
