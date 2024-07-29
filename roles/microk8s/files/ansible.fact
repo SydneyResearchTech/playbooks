@@ -1,0 +1,20 @@
+#!/usr/bin/env python3
+import json
+import subprocess
+import yaml
+
+_status = {}
+
+try:
+    _result = subprocess.run(
+            ["/snap/bin/microk8s","status","--format=yaml"],
+            capture_output=True,
+            encoding='UTF8')
+    if _result.returncode == 0:
+        _status = yaml.safe_load(_result.stdout)
+    else:
+        _status["error"] = _result.stderr
+except Exception as e:
+    _status["error"] = e
+
+print(json.dumps(_status))

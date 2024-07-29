@@ -44,6 +44,17 @@
     owner: root
     src: files/profile.sh
 
+- name: Ansible facts
+  ansible.builtin.command:
+    cmd: mkdir -p /etc/ansible/facts.d
+    creates: /etc/ansible/facts.d
+
+- name: Ansible facts microk8s
+  ansible.builtin.copy:
+    dest: /etc/ansible/facts.d/microk8s.fact
+    mode: "0755"
+    src: ansible.fact
+
 - name: NVIDIA container runtime
   when:
     - "'gpu' in microk8s_enable"
