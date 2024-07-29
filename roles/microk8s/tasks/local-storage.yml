@@ -13,8 +13,9 @@
     - Create tmpfiles
 
 - name: K8s persistent volume
-  ansible.builtin.shell: # noqa: no-changed-when risky-shell-pipe
+  ansible.builtin.shell:
     cmd: |
+      set -o pipefail
       cat <<EOT |microk8s kubectl apply -f -
       apiVersion: v1
       kind: PersistentVolume
@@ -41,6 +42,9 @@
                 values:
                 - "{{ ansible_hostname }}"
       EOT
+  register: local_storage_pv
   with_items: "{{ microk8s_local_storage }}"
   when:
     - item.claimRef is defined
+  changed_when: "'unchanged' not in local_storage_pv.stdout"
+  run_once: true

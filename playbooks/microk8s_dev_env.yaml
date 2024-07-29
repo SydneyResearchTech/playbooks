@@ -112,3 +112,4 @@
                   | sed 's/forward \. .*$/forward . {{ ansible_default_ipv4.address }}/' \
                   | microk8s kubectl apply -f -
                 executable: /bin/bash
+                run_once: true

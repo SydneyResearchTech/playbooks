@@ -1,5 +1,5 @@
 - name: Hostpath storage classes ...
-  ansible.builtin.shell: # noqa: no-changed-when
+  ansible.builtin.shell:
     cmd: |
       set -o pipefail
       cat <<EOT | microk8s kubectl apply -f -
@@ -14,4 +14,7 @@
       volumeBindingMode: WaitForFirstConsumer
       EOT
     executable: /bin/bash
+  register: hostpath_sc
   with_items: "{{ microk8s_hostpaths }}"
+  changed_when: "'unchanged' not in hostpath_sc.stdout"
+  run_once: true
