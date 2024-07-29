@@ -4,7 +4,9 @@ profile: null
 
 exclude_paths:
   - .cache/
+  - .git*
   - roles/vpn/
+  - tmp/
 
 skip_list:
   - schema[changelog]
