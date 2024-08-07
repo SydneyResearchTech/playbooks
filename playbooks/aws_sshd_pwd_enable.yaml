@@ -23,7 +23,7 @@
   tasks:
     - name: Generate password
       ansible.builtin.set_fact:
-        password: "{{ lookup('ansible.builtin.password', '/dev/null') }}"
+        default_password: "{{ lookup('ansible.builtin.password', '/dev/null') }}"
 
     - name: Configure user password and allow access
       when:
@@ -32,10 +32,10 @@
         - name: Set default user password
           ansible.builtin.user:
             name: "{{ default_user }}"
-            password: "{{ password | password_hash }}"
+            password: "{{ (password | default(default_password)) | password_hash }}"
             update_password: always
-          notify:
-            - Expire password
+          # notify:
+          #   - Expire password
 
         - name: SSHd password authentication
           ansible.builtin.copy:
@@ -62,7 +62,7 @@
         resource: "{{ instance_id }}"
         state: "{{ 'present' if active else 'absent' }}"
         tags:
-          sydney.edu.au/resTek/defaultUserPwd: "{{ password }}"
+          sydney.edu.au/resTek/defaultUserPwd: "{{ password | default(default_password) }}"
       become: false
       delegate_to: localhost
 

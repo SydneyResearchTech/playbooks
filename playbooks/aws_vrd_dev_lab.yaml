@@ -8,18 +8,12 @@
   connection: local
   vars:
     default_keyname: dean.taylor@sydney.edu.au
-    default_uuid: ccf512e294dd
+    default_uuid: v1-0-0
+    # default_uuid: ccf512e294dd
     tags_template:
       sydney.edu.au/resTek/ansiblePlaybook: amazon-vrd-dev-lab.yaml
 
-  pre_tasks:
-    - name: Assertions
-      ansible.builtin.assert:
-        fail_msg: Mandatory variable(s) not provided or incorrect format.
-        success_msg: OK
-        that:
-          - subnet_id is defined
-          - vpc_id is defined
+  pre_tasks: []
 
   tasks:
     - name: Get AMIs
@@ -28,10 +22,27 @@
           name: ubuntu-jammy-22.04-amd64-server-cvl-desktop-*
         owners: ["381427642830"]
       register: amis
-    # - ansible.builtin.debug:
-    #     var: amis
 
-    - name: Get virutal-desktop-launch-template.cfn.yml
+    - name: Get subnet
+      amazon.aws.ec2_vpc_subnet_info:
+        filters:
+          state: available
+          # map_public_ip_on_launch: true
+      register: subnets
+
+    - name: Facts
+      ansible.builtin.set_fact:
+        default_ami: "{{ amis.images | last }}"
+        default_subnet: "{{ subnets.subnets|selectattr('map_public_ip_on_launch','equalto',true)|sort(attribute='available_ip_address_count')|last }}"
+
+    - name: Default AMI
+      ansible.builtin.debug:
+        var: default_ami
+    - name: Default subnet
+      ansible.builtin.debug:
+        var: default_subnet
+
+    - name: Get launch template
       ansible.builtin.uri:
         return_content: true
         url: https://raw.githubusercontent.com/SydneyResearchTech/cfn-templates/main/vrd-launch-template.cfn.yml
@@ -48,36 +59,42 @@
         on_create_failure: DELETE
         profile: public
         stack_name: "{{ 'restek-vrd-launch-template-' ~ (uuid|default(default_uuid)) }}"
-        state: present
+        state: "{{ state | default('present') }}"
         tags: "{{ tags_template }}"
         template_body: "{{ cfn_vrd_launch_template.content }}"
+        # template_body: "{{ lookup('ansible.builtin.file', '/Users/dean/cfn-templates/vrd-launch-template.cfn.yml') }}"
         template_parameters:
-          DefaultUserPassword: "{{ password | default('') }}"
           ImageId: "{{ amis.images[-1].image_id }}"
           InstanceType: g4dn.xlarge
           KeyName: "{{ keyname | default(default_keyname) }}"
-          SubnetId: "{{ subnet_id }}"
-          VpcId: "{{ vpc_id }}"
+          SubnetId: "{{ subnet_id | default(default_subnet.subnet_id) }}"
+          VpcId: "{{ vpc_id | default(default_subnet.vpc_id) }}"
       when:
         - cfn_vrd_launch_template.status == 200
+        - 0 > 1
 
     - name: Get vrd-dev.cfn.yml
       ansible.builtin.uri:
         return_content: true
-        url: https://raw.githubusercontent.com/SydneyResearchTech/cfn-templates/main/vrd-dev.cfn.yml
+        url: https://raw.githubusercontent.com/SydneyResearchTech/cfn-templates/main/vrd-lab.cfn.yml
       register: cfn_vrd_dev
 
-    - name: Deploy VRD development environment
+    - name: Deploy VRD environment
       amazon.aws.cloudformation:
         capabilities: ["CAPABILITY_IAM", "CAPABILITY_NAMED_IAM"]
-        disable_rollback: false
+        # disable_rollback: false
         on_create_failure: DELETE
         profile: public
-        stack_name: "{{ 'restek-vrd-dev-env-' ~ (uuid|default(default_uuid)) }}"
-        state: present
+        stack_name: "{{ 'restek-vrd-lab-' ~ (uuid|default(default_uuid)) }}"
+        state: "{{ state | default('present') }}"
         tags: "{{ tags_template }}"
         template_body: "{{ cfn_vrd_launch_template.content }}"
-        template_parameters: {}
+        # template_body: "{{ lookup('ansible.builtin.file', '/Users/dean/cfn-templates/vrd-lab.cfn.yml') }}"
+        template_parameters:
+          AvailabilityZones: ap-southeast-2a
+          # AvailabilityZones: "{{ availability_zone | default(default_subnet.availability_zone) }}"
+          ASGDesiredCapacity: "{{ capacity | default(1) }}"
+          LaunchTemplateName: "{{ 'restek-vrd-launch-template-' ~ (uuid|default(default_uuid)) }}"
+          LaunchTemplateVersion: 1
       when:
         - cfn_vrd_launch_template.status == 200
-        - 0 > 1

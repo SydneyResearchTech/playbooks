@@ -1,0 +1,71 @@
+---
+# https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html
+- name: WORKAROUND. Install distribution NVIDIA toolkit
+  hosts: "{{ target|default('all') }}"
+  become: true
+
+  tasks:
+    - name: Facts
+      ansible.builtin.set_fact:
+        distro: "{{ [(ansible_distribution | lower), (ansible_distribution_version | split('.') | join())] | join() }}"
+        arch: "{{ ansible_architecture }}"
+
+    - name: Remove previous CUDA toolkit
+      ansible.builtin.command:
+        cmd: /usr/local/cuda-11.7/bin/cuda-uninstaller --silent
+        removes: /usr/local/cuda-11.7/bin/cuda-uninstaller
+
+    - name: Remove previous nvidia drivers
+      ansible.builtin.command:
+        cmd: /usr/bin/nvidia-uninstall
+        removes: /usr/bin/nvidia-uninstall
+
+    - name: Install NVIDIA packages pre-req
+      ansible.builtin.apt:
+        cache_valid_time: 86400
+        name:
+          - linux-headers-{{ ansible_kernel }}
+        state: present
+        update_cache: true
+
+    # sudo apt-key del 7fa2af80
+    - name: Deleted old NVIDIA repo Apt key
+      ansible.builtin.apt_key:
+        id: "7fa2af80"
+        state: absent
+
+    - name: Install new cuda-keyring
+      ansible.builtin.apt:
+        deb: https://developer.download.nvidia.com/compute/cuda/repos/{{ distro }}/{{ arch }}/cuda-keyring_1.1-1_all.deb
+        state: present
+
+    - name: Add CUDA repo
+      ansible.builtin.apt_repository:
+        filename: cuda-{{ distro }}-{{ arch }}
+        mode: "0644"
+        repo: >
+          deb [signed-by=/usr/share/keyrings/cuda-archive-keyring.gpg]
+          https://developer.download.nvidia.com/compute/cuda/repos/{{ distro }}/{{ arch }}/ /
+        state: present
+        update_cache: true
+
+    - name: Add pin file to prioritize CUDA repo
+      ansible.builtin.get_url:
+        dest: /etc/apt/preferences.d/cuda-repository-pin-600
+        mode: "0644"
+        url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distro }}/{{ arch }}/cuda-{{ distro }}.pin
+
+    - name: Install CUDA toolkit
+      ansible.builtin.apt:
+        cache_valid_time: 86400
+        name:
+          - cuda-toolkit
+          - nvidia-gds
+        state: present
+        update_cache: true
+      register: install_cuda_tookit
+
+    - name: Reboot if required
+      ansible.builtin.reboot: # noqa no-handler
+      when:
+        - install_cuda_tookit.changed

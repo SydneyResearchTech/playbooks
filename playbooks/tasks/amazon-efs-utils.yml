@@ -5,20 +5,33 @@
 - name: Pre-req.
   ansible.builtin.apt:
     name:
-      - git
       - binutils
+      - cargo
+      - git
+      - libssl-dev
+
+- name: Install botocore
+  ansible.builtin.pip:
+    name: botocore
+
+- name: Set access to /usr/local/src
+  ansible.builtin.command:
+    cmd: setfacl -m u:ubuntu:rwX /usr/local/src
+    creates: /usr/local/src/efs-utils
 
 - name: Clone efs-utils
   ansible.builtin.git: # noqa: latest[git]
     accept_newhostkey: true
     dest: /usr/local/src/efs-utils
     repo: https://github.com/aws/efs-utils
+  become: false
 
 - name: Build debs
   ansible.builtin.command:
     chdir: /usr/local/src/efs-utils
     cmd: ./build-deb.sh
     creates: ./build
+  become: false
 
 - name: Get built packages
   ansible.builtin.find:
@@ -31,7 +44,3 @@
   ansible.builtin.apt:
     deb: "{{ item.path }}"
   loop: "{{ amazon_efs_utils.files }}"
-
-- name: Install botocore
-  ansible.builtin.pip:
-    name: botocore
