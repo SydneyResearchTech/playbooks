@@ -1,0 +1,144 @@
+---
+- name: AWS EKS create cluster
+  hosts: localhost
+  become: false
+  vars:
+    aws_profile: prod
+    calico_cidr: "100.10.0.0/10"
+    calico_enabled: false
+    cluster_name: ansible-template
+    karpenter_namespace: kube-system
+    karpenter_version: "0.37.0"
+    kubernetes_version: "1.29"
+    vpc_cidr: "192.168.0.0/16"
+
+  pre_tasks: []
+  roles: []
+
+  tasks:
+    - name: Get AWS region
+      ansible.builtin.command:
+        cmd: aws configure get region
+      changed_when: false
+      register: region_output
+
+    - name: Get AWS account ID
+      ansible.builtin.command:
+        cmd: aws sts get-caller-identity --profile {{ aws_profile }} --output text --query 'Account'
+      changed_when: false
+      register: aws_account_id_output
+        # - ansible.builtin.debug: {var: aws_account_id_output}
+
+    - name: Set facts
+      ansible.builtin.set_fact:
+        account_id: "{{ aws_account_id_output.stdout }}"
+        flux_dir: "{{ (lookup('ansible.builtin.env', 'HOME'), 'flux') | path_join }}"
+        region: "{{ region_output.stdout }}"
+
+    - name: AWS KMS create key
+      amazon.aws.kms_key:
+        alias: eks-secrets-{{ cluster_name }}
+        description: EKS secrets encryption for cluster {{ cluster_name }}
+        key_spec: SYMMETRIC_DEFAULT
+        key_usage: ENCRYPT_DECRYPT
+        profile: "{{ aws_profile }}"
+        state: present
+        tags:
+          alpha.eksctl.io/cluster-name: "{{ cluster_name }}"
+          eksctl.cluster.k8s.io/v1alpha1/cluster-name: "{{ cluster_name }}"
+          sydney.edu.au/ou: Research Technology
+          sydney.edu.au/resTek/createBy: dean.taylor@sydney.edu.au
+      register: kms_key_output
+        # - ansible.builtin.debug: {var: kms_key_output}
+
+    # https://karpenter.sh/v0.37/getting-started/getting-started-with-karpenter/
+    - name: Get karpenter provider cfn
+      ansible.builtin.uri:
+        return_content: true
+        url: https://raw.githubusercontent.com/aws/karpenter-provider-aws/v{{ karpenter_version }}/website/content/en/preview/getting-started/getting-started-with-karpenter/cloudformation.yaml
+      register: karpenter_cfn_output
+
+    - name: Karpenter cloudformation deploy
+      amazon.aws.cloudformation:
+        capabilities: ["CAPABILITY_NAMED_IAM"]
+        on_create_failure: DELETE
+        profile: "{{ aws_profile }}"
+        stack_name: Karpenter-{{ cluster_name }}
+        state: present
+        tags:
+          alpha.eksctl.io/cluster-name: "{{ cluster_name }}"
+          eksctl.cluster.k8s.io/v1alpha1/cluster-name: "{{ cluster_name }}"
+          sydney.edu.au/ou: Research Technology
+          sydney.edu.au/resTek/createBy: dean.taylor@sydney.edu.au
+        template_body: "{{ karpenter_cfn_output.content }}"
+        template_parameters:
+          ClusterName: "{{ cluster_name }}"
+      when:
+        - karpenter_cfn_output.status == 200
+
+    - name: Create EKS cluster template file
+      ansible.builtin.shell:
+        cmd: |
+          export AWS_ACCOUNT_ID={{ account_id | quote }}
+          export AWS_DEFAULT_REGION={{ region | quote }}
+          export EKS_CLUSTER_NAME={{ cluster_name | quote }}
+          export FLUX={{ flux_dir | quote }}
+          export K8S_VERSION={{ kubernetes_version | quote }}
+          export KEY_ARN={{ kms_key_output.key_arn | quote }}
+          export VPC_CIDR={{ vpc_cidr | quote }}
+
+          envsubst <${FLUX}/docs/eks/template.eks.yaml >${FLUX}/clusters/${EKS_CLUSTER_NAME}.eks.yaml
+        creates: "{{ flux_dir }}/clusters/{{ cluster_name }}.eks.yaml"
+
+    - name: Get EKS cluster SG
+      amazon.aws.ec2_security_group_info:
+        filters:
+          group_name: "eks-cluster-sg-{{ cluster_name }}-*"
+          "tag:aws:eks:cluster-name": "{{ cluster_name }}"
+        profile: "{{ aws_profile }}"
+      register: cluster_sg_output
+        # - ansible.builtin.debug: {var: cluster_sg_output}
+
+    - name: Get EKS cluster subnets
+      amazon.aws.ec2_vpc_subnet_info:
+        filters:
+          "tag:eksctl.cluster.k8s.io/v1alpha1/cluster-name": "{{ cluster_name }}"
+          "tag:kubernetes.io/role/elb": 1
+        profile: "{{ aws_profile }}"
+      register: cluster_sn_output
+        # - ansible.builtin.debug: {var: cluster_sn_output}
+
+    - name: EFS CSI config.
+      when:
+        - cluster_sg_output.security_groups | length > 0
+        - cluster_sn_output.subnets | length > 0
+      block:
+        - name: Get EFS cfn
+          ansible.builtin.uri:
+            return_content: true
+            url: https://raw.githubusercontent.com/SydneyResearchTech/cfn-templates/main/efs.cfn.yml
+          register: efs_cfn_output
+
+        - name: EFS deployment
+          amazon.aws.cloudformation:
+            on_create_failure: DELETE
+            profile: "{{ aws_profile }}"
+            stack_name: eks-{{ cluster_name }}-efs-csi
+            state: present
+            tags:
+              alpha.eksctl.io/cluster-name: "{{ cluster_name }}"
+              eksctl.cluster.k8s.io/v1alpha1/cluster-name: "{{ cluster_name }}"
+              sydney.edu.au/ou: Research Technology
+              sydney.edu.au/resTek/createBy: dean.taylor@sydney.edu.au
+            template_body: "{{ efs_cfn_output.content }}"
+            template_parameters:
+              VpcId: "{{ cluster_sg_output.security_groups.0.vpc_id }}"
+              SecurityGroupId: "{{ cluster_sg_output.security_groups.0.group_id }}"
+              SubnetId1: "{{ cluster_sn_output.subnets.0.id }}"
+              SubnetId2: "{{ cluster_sn_output.subnets.1.id }}"
+              SubnetId3: "{{ cluster_sn_output.subnets.2.id }}"
+          when:
+            - efs_cfn_output.status == 200
+
+  post_tasks: []
+  handlers: []
