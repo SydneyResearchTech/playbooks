@@ -49,7 +49,13 @@ ansible-pull -clocal -i,localhost \
 
 | Playbook | Purpose | Notes |
 | -------- | ------- | ----- |
-| microk8s_dev_env.yaml | Kubernetes cluster for development. Incorporating DNS resolution and configuration management, Certificate management, Load balancer and Ingress controller. | Uses include OIDC and other authentication integration work. Simulation of full disparate service. Includes full DNS provider functionality. |
+| apt_upgrade_reboot |
+| aws_sshd_pwd_enable |
+| aws_vrd_dev_lab |
+| edge_compute |
+| [eks_create_cluster](docs/eks_create_cluster.md) | Deploy an EKS cluster |
+| microk8s_dev_env | Kubernetes cluster for development. Incorporating DNS resolution and configuration management, Certificate management, Load balancer and Ingress controller. | Uses include OIDC and other authentication integration work. Simulation of full disparate service. Includes full DNS provider functionality. |
+| nvidia_toolkit_install |
 
 ## Roles
 

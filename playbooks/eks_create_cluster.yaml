@@ -55,7 +55,9 @@
     - name: Get karpenter provider cfn
       ansible.builtin.uri:
         return_content: true
-        url: https://raw.githubusercontent.com/aws/karpenter-provider-aws/v{{ karpenter_version }}/website/content/en/preview/getting-started/getting-started-with-karpenter/cloudformation.yaml
+        url: "https://raw.githubusercontent.com/aws/karpenter-provider-aws\
+              /v{{ karpenter_version }}\
+              /website/content/en/preview/getting-started/getting-started-with-karpenter/cloudformation.yaml"
       register: karpenter_cfn_output
 
     - name: Karpenter cloudformation deploy
