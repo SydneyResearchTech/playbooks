@@ -1,0 +1,30 @@
+---
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Provider
+metadata:
+  name: discord
+  namespace: flux-system
+spec:
+  type: discord
+  secretRef:
+    name: discord-webhook
+---
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Alert
+metadata:
+  name: infrastructure-support
+  namespace: flux-system
+spec:
+  summary: "EKS"
+  eventMetadata:
+    app.kubernetes.io/env: "testing"
+    app.kubernetes.io/cluster: {{ cluster_name | quote }}
+    app.kubernetes.io/region: "ap-southeast-2"
+  providerRef:
+    name: discord
+  eventSeverity: error
+  eventSources:
+  - kind: HelmRelease
+    name: '*'
+  - kind: Kustomization
+    name: '*'

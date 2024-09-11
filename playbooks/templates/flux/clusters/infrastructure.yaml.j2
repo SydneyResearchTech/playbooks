@@ -1,0 +1,56 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1beta2
+kind: Kustomization
+metadata:
+  name: infrastructure-controllers
+  namespace: flux-system
+spec:
+  dependsOn:
+  - name: infrastructure-secrets
+  interval: 1m0s
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./infrastructure/base-aws-vpc/controller
+  prune: true
+  postBuild:
+    substitute:
+      cluster_name: {{ cluster_name }}
+      ingress_healthcheck_port: "32741"
+  patches:
+    []
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1beta2
+kind: Kustomization
+metadata:
+  name: infrastructure
+  namespace: flux-system
+spec:
+  dependsOn:
+  - name: infrastructure-controllers
+  interval: 1m0s
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./infrastructure/base-aws-vpc/config
+  prune: true
+  components: []
+  # - components/rds
+  postBuild:
+    substitute:
+      cluster_name: {{ cluster_name }}
+      efs_file_system_id: {{ efs_file_system_id }}
+      # uuid: 000000000000
+      # rds_vpc_security_group_id: sg-00000000000000000
+  patches: []
+  # - patch: |-
+  #     apiVersion: rds.services.k8s.aws/v1alpha1
+  #     kind: DBSubnetGroup
+  #     metadata:
+  #       name: db-subnet-group
+  #     spec:
+  #       subnetIDs: []
+  #   target:
+  #     kind: DBSubnetGroup
+  #     name: db-subnet-group
+  #     namespace: postgres

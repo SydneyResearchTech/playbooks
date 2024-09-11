@@ -1,0 +1,113 @@
+---
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: {{ cluster_name }}
+  region: ap-southeast-2
+  version: {{ kubernetes_version | quote }}
+  tags:
+    karpenter.sh/discovery: {{ cluster_name }}
+
+addonsConfig:
+  disableDefaultAddons: true
+  autoApplyPodIdentityAssociations: true
+
+addons:
+  - name: kube-proxy
+  - name: coredns
+  - name: eks-pod-identity-agent
+{% for addon in addons %}
+  - name: {{ addon }}
+{% endfor %}
+
+gitops:
+  flux:
+    gitProvider: "github"
+    flags:
+      owner: SydneyResearchTech
+      path: clusters/{{ cluster_name }}
+      repository: gitops-flux
+      branch: main
+
+iam:
+  # Karpenter pre-req. cloudformation template, see docs
+  podIdentityAssociations:
+    - namespace: kube-system
+      serviceAccountName: karpenter
+      roleName: "{{ cluster_name }}-karpenter"
+      permissionPolicyARNs:
+        - arn:aws:iam::{{ account_id }}:policy/KarpenterControllerPolicy-{{ cluster_name }}
+
+  serviceAccounts:
+    - metadata:
+        name: source-controller
+        namespace: flux-system
+      attachPolicyARNs:
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+      roleOnly: true
+    - metadata:
+        name: aws-load-balancer-controller
+        namespace: kube-system
+      wellKnownPolicies:
+        awsLoadBalancerController: true
+    - metadata:
+        name: ack-rds-controller
+        namespace: ack-system
+      attachPolicyARNs:
+        - arn:aws:iam::aws:policy/AmazonRDSFullAccess
+      roleOnly: false
+
+  withOIDC: true
+
+iamIdentityMappings:
+  - arn: "arn:aws:iam::{{ account_id }}:role/KarpenterNodeRole-{{ cluster_name }}"
+    username: system:node:{{'{{'}}EC2PrivateDNSName{{'}}'}}
+    groups:
+      - system:bootstrappers
+      - system:nodes
+      ## If you intend to run Windows workloads, the kube-proxy group should be specified.
+      # For more information, see https://github.com/aws/karpenter/issues/5099.
+      # - eks:kube-proxy-windows
+
+# https://eksctl.io/usage/eksctl-karpenter/
+# https://github.com/aws/karpenter-provider-aws/releases
+# NB: Moved to Ansible and Flux (GitOps) to automate updates
+#karpenter:
+#  version: "1.0.1"
+#  createServiceAccount: true
+#  # defaultProfile: "eksctl-KarpenterNodeInstanceProfile-restek-dev"
+#  withSpotInterruptionQueue: true
+
+managedNodeGroups:
+  - name: m7g-4xlarge
+    amiFamily: AmazonLinux2
+    disableIMDSv1: true
+    disablePodIMDS: false
+    instanceType: m7g.4xlarge
+    minSize: 3
+    maxSize: 10
+    desiredCapacity: 3
+    volumeSize: 100
+    tags:
+      "uni:billing:application": "xnat"
+      "uni:billing:support": "unmanaged"
+      "uni:operations:backup": "none"
+    updateConfig:
+      maxUnavailable: 1
+
+vpc:
+  clusterEndpoints:
+    privateAccess: false
+    publicAccess: true
+{% if vpc_id is defined and vpc_id %}
+  id: {{ vpc_id }}
+{% else %}
+  cidr: {{ vpc_cidr }}
+{% endif %}
+
+privateCluster:
+  enabled: false
+  skipEndpointCreation: false
+
+secretsEncryption:
+  keyARN: "{{ key_arn }}"
