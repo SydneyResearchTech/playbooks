@@ -29,7 +29,15 @@
   changed_when: "'unchanged' not in ingress_srv.stdout"
   run_once: true
 
+- name: Get nginx-ingress controller details?
+  ansible.builtin.command:
+    cmd: microk8s kubectl -ningress get daemonset nginx-ingress-microk8s-controller -o yaml
+  changed_when: false
+  register: ingress_controller_output
+
 - name: Ingress IP via LB
+  when:
+    - "'- --publish-service=$(POD_NAMESPACE)/ingress' not in ingress_controller_output.stdout"
   ansible.builtin.shell:
     cmd: |
       set -o pipefail

@@ -30,11 +30,14 @@
     cmd: snap install microk8s --classic
     creates: /snap/microk8s
 
-- name: Microk8s status
+- name: Microk8s status?
   ansible.builtin.command:
-    cmd: microk8s status --format short --wait-ready --timeout 60
-  register: microk8s_status
-  changed_when: "'microk8s is running' not in microk8s_status.stdout"
+    cmd: microk8s status --format yaml --wait-ready --timeout 60
+  register: microk8s_status_output
+  changed_when: false
+- name: Set facts
+  ansible.builtin.set_fact:
+    microk8s_status: "{{ microk8s_status_output.stdout | from_yaml }}"
 
 - name: Create /etc/profile.d/microk8s.sh
   ansible.builtin.copy:
@@ -44,12 +47,12 @@
     owner: root
     src: files/profile.sh
 
-- name: Ansible facts
+- name: Create Ansible facts directory
   ansible.builtin.command:
     cmd: mkdir -p /etc/ansible/facts.d
     creates: /etc/ansible/facts.d
 
-- name: Ansible facts microk8s
+- name: Install Ansible facts for microk8s
   ansible.builtin.copy:
     dest: /etc/ansible/facts.d/microk8s.fact
     mode: "0755"
@@ -73,57 +76,61 @@
     owner: root
     src: files/metallb-range.py
 
-- name: Microk8s enable ...
-  ansible.builtin.shell: # noqa: no-changed-when
-    cmd: |
-      ADDON="{{ item }}"
-      if [[ $ADDON == gpu ]]; then
-        microk8s enable gpu --set toolkit.enabled=false
-      elif [[ $ADDON == metallb* ]]; then
-        [[ $ADDON == metallb:* ]] \
-          && microk8s enable ${ADDON} \
-          || microk8s enable $(metallb-range.py "{{ microk8s_metallb_range }}")
-      else
-        microk8s enable ${ADDON}
-      fi
-  with_items:
-    - "{{ microk8s_enable }}"
-    - "{{ ((microk8s_hostpaths | length > 0) and (microk8s_enable | select('search', 'hostpath-storage') | length == 0)) | ternary(['hostpath-storage'], []) }}"
-  when:
-    - "microk8s_status.stdout_lines | select('search', ('core/%s: disabled' | format((item|split(':'))[0]))) | length > 0"
-
-- name: Configure cert-manager
-  ansible.builtin.import_tasks: configure-cert-manager.yml
-  when:
-    - "'cert-manager' in microk8s_enable"
-
-- name: Ingress service
-  ansible.builtin.import_tasks: ingress-lb-patch.yml
-  when:
-    - "'metallb' in microk8s_enable"
-
-- name: Storage class microk8s-hostpath
-  ansible.builtin.import_tasks: hostpath_provisioner.yml
-  when:
-    - "microk8s_hostpaths|length>0"
-
-- name: Class local-storage
-  ansible.builtin.shell:
-    cmd: |
-      set -o pipefail
-      cat <<EOT |microk8s kubectl apply -f -
-      apiVersion: storage.k8s.io/v1
-      kind: StorageClass
-      metadata:
-        name: local-storage
-      provisioner: kubernetes.io/no-provisioner
-      reclaimPolicy: Delete
-      volumeBindingMode: WaitForFirstConsumer
-      EOT
-    executable: /bin/bash
-  register: sc_local_storage
-  changed_when: "'storageclass.storage.k8s.io/local-storage unchanged' not in sc_local_storage.stdout"
+- name: Cluster configuration
   run_once: true
+  # delegate_to: cluster_lead
+  block:
+    - name: Microk8s enable addons
+      ansible.builtin.shell: # noqa: no-changed-when
+        cmd: |
+          ADDON="{{ item }}"
+          if [[ $ADDON == gpu ]]; then
+            microk8s enable gpu --set toolkit.enabled=false
+          elif [[ $ADDON == metallb* ]]; then
+            [[ $ADDON == metallb:* ]] \
+              && microk8s enable ${ADDON} \
+              || microk8s enable $(metallb-range.py "{{ microk8s_metallb_range }}")
+          else
+            microk8s enable ${ADDON}
+          fi
+      with_items:
+        - "{{ microk8s_enable }}"
+        - "{{ ((microk8s_hostpaths | length > 0) and (microk8s_enable | select('search', 'hostpath-storage') | length == 0)) | ternary(['hostpath-storage'], []) }}"
+      register: enable_addon_output
+      changed_when: "'is enabled' in enable_addon_output.stdout"
+
+    - name: Configure cert-manager
+      ansible.builtin.import_tasks: configure-cert-manager.yml
+      when:
+        - "'cert-manager' in microk8s_enable"
+
+    - name: Ingress service
+      ansible.builtin.import_tasks: ingress-lb-patch.yml
+      when:
+        - "'metallb' in microk8s_enable"
+        - "'ingress' in microk8s_enable"
+
+    - name: Storage class microk8s-hostpath
+      ansible.builtin.import_tasks: hostpath_provisioner.yml
+      when:
+        - "microk8s_hostpaths|length>0"
+
+    - name: Class local-storage
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          cat <<EOT |microk8s kubectl apply -f -
+          apiVersion: storage.k8s.io/v1
+          kind: StorageClass
+          metadata:
+            name: local-storage
+          provisioner: kubernetes.io/no-provisioner
+          reclaimPolicy: Delete
+          volumeBindingMode: WaitForFirstConsumer
+          EOT
+        executable: /bin/bash
+      register: sc_local_storage
+      changed_when: "'storageclass.storage.k8s.io/local-storage unchanged' not in sc_local_storage.stdout"
 
 - name: Manage local-storage
   ansible.builtin.import_tasks: local-storage.yml

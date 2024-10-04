@@ -10,11 +10,18 @@
         - name: Include amazon-efs-utils
           ansible.builtin.include_tasks: tasks/amazon-efs-utils.yml
 
+    - name: Create directories
+      tags: [always]
+      ansible.builtin.file:
+        mode: "0755"
+        path: "{{ item }}"
+        state: directory
+      with_items:
+        - /etc/ansible
+        - /etc/ansible/files
+
   roles:
     - role: restek.core.microk8s
-    - role: restek.core.named
-      when:
-        - named_enabled | default(false) | bool
 
   tasks:
     - name: Does /etc/docker exist?
@@ -66,50 +73,147 @@
             - (daemon_json['content']|b64decode|from_json)['insecure-registries'] is not defined
               or (daemon_json['content']|b64decode|from_json)['insecure-registries'] is not contains('localhost:32000')
 
-    - name: Configure host DNS resolve
+    - name: Configure DNS resolve
+      tags: [named]
       when:
         - named_enabled | default(false) | bool
       block:
-        - name: Create /usr/local/bin/finalise-external-dns.sh
-          ansible.builtin.template:
-            dest: /usr/local/bin/finalise-external-dns.sh
-            lstrip_blocks: true
-            mode: "0755"
-            src: templates/usr/local/bin/finalise-external-dns.sh.j2
+        - name: Update ResTek helm repo
+          ansible.builtin.command:
+            cmd: microk8s helm3 repo update restek
+          changed_when: false
+          register: restek_update_output
+          ignore_errors: true
 
-        - name: Configure client DNS resolution
-          tags: [bind, named, resolvd]
+        - name: Add ResTek helm repo
+          when:
+            - "restek_update_output.rc != 0"
+          ansible.builtin.command:
+            cmd: microk8s helm3 repo add restek https://sydneyresearchtech.github.io/charts/
+          changed_when: true
+
+        - name: Get upstream dns server(s)
+          ansible.builtin.shell:
+            cmd: |
+              set -o pipefail
+              resolvectl -i{{ ansible_default_ipv4.interface }} dns | \
+                sed \
+                  -e 's/.*:\s\+\([0-9a-f.: ]*\).*$/\1/' \
+                  -e 's/ fe80::[0-9a-f.:]*//'
+            executable: /bin/bash
+          register: dns_forwarders_output
+          changed_when: false
+
+        - name: Set facts
+          ansible.builtin.set_fact:
+            dns_forwarders: "{{ dns_forwarders_output.stdout | split }}"
+
+        - name: Create bind values file for helm deployment
+          ansible.builtin.copy:
+            content: |
+              named_options:
+                forwarders: {{ dns_forwarders | to_json }}
+                forward_only: true
+                dnssec_validation: "no"
+                extra: ""
+              named_zones:
+                - name: fake.sydney.edu.au
+                  type: master
+                  extra: |
+                    allow-transfer { key "tsig-key-fake.sydney.edu.au"; };
+                    update-policy { grant tsig-key-fake.sydney.edu.au zonesub ANY; };
+                  zone: |
+                    $TTL 60
+                    $ORIGIN fake.sydney.edu.au.
+                    @ IN SOA fake.sydney.edu.au. root.fake.sydney.edu.au. (1 60 60 60 60);
+                    @ IN NS {{ ansible_fqdn }}.
+              service:
+                type: LoadBalancer
+              resources:
+                limits:
+                  cpu: 2
+                  memory: 500Mi
+                requests:
+                  cpu: 100m
+                  memory: 100Mi
+            dest: /etc/ansible/files/bind_values.yaml
+            mode: "0644"
+          register: bind_values
+
+        - name: Deploy Bind9
+          when: bind_values.changed
+          ansible.builtin.command:
+            cmd: >
+              microk8s helm3 upgrade bind restek/bind -i
+              -f /etc/ansible/files/bind_values.yaml
+              --wait --timeout 1m
+          run_once: true
+          register: helm_bind_output
+          changed_when: "'has been upgraded' in helm_bind_output.stdout"
+
+        - name: Get LB IP address?
+          ansible.builtin.command:
+            cmd: >
+              microk8s kubectl get service bind
+              -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+          changed_when: false
+          register: dns_ip_output
+
+        - name: Get coredns forwarder
+          ansible.builtin.shell:
+            cmd: >
+              set -o pipefail;
+              microk8s kubectl -n kube-system get configmap/coredns -oyaml |
+              sed -n 's/^.*forward \. \([0-9a-f.:]\+\).*$/\1/p' |
+              head -n1
+            executable: /bin/bash
+          changed_when: false
+          register: coredns_forward_output
+
+        - name: Set facts
+          ansible.builtin.set_fact:
+            dns_server: "{{ dns_ip_output.stdout }}"
+            coredns_forward_ip: "{{ coredns_forward_output.stdout }}"
+
+        - name: Verify DNS service?
+          ansible.builtin.command:
+            cmd: host -W1 google.com.au {{ dns_server }}
+          changed_when: false
+
+        - name: Is /etc/resolv.conf a symlink?
+          ansible.builtin.stat:
+            path: /etc/resolv.conf
+          register: resolv_conf
+
+        - name: Update /etc/resolv.conf
+          when: resolv_conf.stat.islnk
           block:
-            - name: Is /etc/resolv.conf a symlink?
-              ansible.builtin.stat:
-                path: /etc/resolv.conf
-              register: resolv_conf
+            - name: Unlink /etc/resolv.conf from systemd-resolved
+              ansible.builtin.command:
+                cmd: unlink /etc/resolv.conf
+                removes: /etc/resolv.conf
 
-            - name: Update /etc/resolv.conf
-              when: resolv_conf.stat.islnk
-              block:
-                - name: Unlink /etc/resolv.conf from systemd-resolved
-                  ansible.builtin.command:
-                    cmd: unlink /etc/resolv.conf
-                    removes: /etc/resolv.conf
+            - name: Copy /run/systemd/resolve/stub-resolv.conf to /etc/resolv.conf
+              ansible.builtin.shell: # noqa: command-instead-of-module
+                cmd: sed -n -e '/^#/!p' /run/systemd/resolve/stub-resolv.conf >/etc/resolv.conf
+                creates: /etc/resolv.conf
 
-                - name: Copy /run/systemd/resolve/stub-resolv.conf to /etc/resolv.conf
-                  ansible.builtin.shell: # noqa: command-instead-of-module
-                    cmd: sed -n -e '/^#/!p' /run/systemd/resolve/stub-resolv.conf >/etc/resolv.conf
-                    creates: /etc/resolv.conf
+        - name: Set nameserver
+          ansible.builtin.lineinfile:
+            line: nameserver {{ dns_server }}
+            path: /etc/resolv.conf
+            search_string: nameserver
 
-            - name: Set nameserver
-              ansible.builtin.lineinfile:
-                line: nameserver {{ ansible_default_ipv4.address }}
-                path: /etc/resolv.conf
-                search_string: nameserver
-
-            - name: Microk8s set nameserver
-              ansible.builtin.shell: # noqa: no-changed-when
-                cmd: |
-                  set -o pipefail
-                  microk8s kubectl -n kube-system get configmap/coredns -oyaml \
-                  | sed 's/forward \. .*$/forward . {{ ansible_default_ipv4.address }}/' \
-                  | microk8s kubectl apply -f -
-                executable: /bin/bash
-                run_once: true
+        - name: Microk8s set nameserver
+          when:
+            - "coredns_forward_ip not in dns_server"
+          ansible.builtin.shell:
+            cmd: |
+              set -o pipefail
+              microk8s kubectl -n kube-system get configmap/coredns -oyaml \
+              | sed 's/forward \. .*$/forward . {{ dns_server }}/' \
+              | microk8s kubectl apply -f -
+            executable: /bin/bash
+          run_once: true
+          register: coredns_output
+          changed_when: "'configmap/coredns configured' in coredns_output.stdout"
