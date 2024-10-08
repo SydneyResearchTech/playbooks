@@ -111,8 +111,8 @@
           ansible.builtin.shell:
             cmd: |
               set -o pipefail
-              resolvectl domain | \
-                sed -n 's/Global: \(.*\)$/\1/p'
+              resolvectl -i{{ ansible_default_ipv4.interface }} domain | \
+                sed 's/.*:\s\+\(.*\)$/\1/'
             executable: /bin/bash
           register: dns_search_output
           changed_when: false
