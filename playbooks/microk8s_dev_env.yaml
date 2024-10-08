@@ -1,6 +1,9 @@
 - name: Microk8s development environment
   hosts: "{{ target|default('all') }}"
   become: true
+  vars:
+    dns_domain: fake.sydney.edu.au
+
 
   pre_tasks:
     - name: Install Amazon EFS utils
@@ -92,7 +95,7 @@
             cmd: microk8s helm3 repo add restek https://sydneyresearchtech.github.io/charts/
           changed_when: true
 
-        - name: Get upstream dns server(s)
+        - name: DNS forwarders?
           ansible.builtin.shell:
             cmd: |
               set -o pipefail
@@ -104,9 +107,20 @@
           register: dns_forwarders_output
           changed_when: false
 
+        - name: DNS search?
+          ansible.builtin.shell:
+            cmd: |
+              set -o pipefail
+              resolvectl domain | \
+                sed -n 's/Global: \(.*\)$/\1/p'
+            executable: /bin/bash
+          register: dns_search_output
+          changed_when: false
+
         - name: Set facts
           ansible.builtin.set_fact:
             dns_forwarders: "{{ dns_forwarders_output.stdout | split }}"
+            dns_search: "{{ dns_search_output.stdout | split }}"
 
         - name: Create bind values file for helm deployment
           ansible.builtin.copy:
@@ -159,26 +173,28 @@
           changed_when: false
           register: dns_ip_output
 
-        - name: Get coredns forwarder
-          ansible.builtin.shell:
-            cmd: >
-              set -o pipefail;
-              microk8s kubectl -n kube-system get configmap/coredns -oyaml |
-              sed -n 's/^.*forward \. \([0-9a-f.:]\+\).*$/\1/p' |
-              head -n1
-            executable: /bin/bash
+        - name: Slurp coredns config
+          ansible.builtin.command:
+            cmd: microk8s kubectl -n kube-system get configmap/coredns -oyaml
           changed_when: false
-          register: coredns_forward_output
+          register: coredns_output
+        # - ansible.builtin.debug: {var: (coredns_output.stdout|from_yaml)}
 
         - name: Set facts
           ansible.builtin.set_fact:
             dns_server: "{{ dns_ip_output.stdout }}"
-            coredns_forward_ip: "{{ coredns_forward_output.stdout }}"
+            coredns: "{{ coredns_output.stdout|from_yaml }}"
 
-        - name: Verify DNS service?
-          ansible.builtin.command:
-            cmd: host -W1 google.com.au {{ dns_server }}
-          changed_when: false
+        - name: Set facts
+          ansible.builtin.set_fact:
+            coredns_corefile: '{{
+              (coredns_output.stdout|from_yaml).data.Corefile |
+              regex_replace(
+                "(\s+forward\s+[a-z0-9.]*\s+[a-f0-9:.]+\n?)+",
+                ("\n%4sforward fake.sydney.edu.au %s\n%4sforward . %s\n"|format("",dns_server,"",(dns_forwarders|first))),
+                multiline=True)
+              }}'
+        # - ansible.builtin.debug: {msg: "{{ coredns | combine({'data': {'Corefile': coredns_corefile}}) }}"}
 
         - name: Is /etc/resolv.conf a symlink?
           ansible.builtin.stat:
@@ -198,22 +214,37 @@
                 cmd: sed -n -e '/^#/!p' /run/systemd/resolve/stub-resolv.conf >/etc/resolv.conf
                 creates: /etc/resolv.conf
 
-        - name: Set nameserver
-          ansible.builtin.lineinfile:
-            line: nameserver {{ dns_server }}
-            path: /etc/resolv.conf
-            search_string: nameserver
+        - name: Update /etc/resolv.conf
+          ansible.builtin.copy:
+            content: |
+              nameserver {{ dns_server }}
+              nameserver {{ dns_forwarders | first }}
+              options edns0 trust-ad
+              search fake.sydney.edu.au {{ dns_search | join(" ") }}
+            dest: /etc/resolv.conf
+            mode: "0644"
 
-        - name: Microk8s set nameserver
+        - name: Update microk8s coredns
+          ansible.builtin.copy:
+            content: "{{ coredns_corefile }}"
+            dest: /etc/ansible/files/coredns_corefile.yaml
+            mode: "0644"
+          notify:
+            - Set microk8s forwarders
+          register: corefile_status
+
+        - name: Record microk8s forwarders
           when:
-            - "coredns_forward_ip not in dns_server"
-          ansible.builtin.shell:
-            cmd: |
-              set -o pipefail
-              microk8s kubectl -n kube-system get configmap/coredns -oyaml \
-              | sed 's/forward \. .*$/forward . {{ dns_server }}/' \
-              | microk8s kubectl apply -f -
-            executable: /bin/bash
-          run_once: true
-          register: coredns_output
-          changed_when: "'configmap/coredns configured' in coredns_output.stdout"
+            - corefile_status.changed
+          ansible.builtin.copy:
+            content: "{{ coredns | combine({'data': {'Corefile': coredns_corefile}}) | to_nice_yaml }}"
+            dest: /etc/ansible/files/coredns.yaml
+            mode: "0644"
+
+  handlers:
+    - name: Set microk8s forwarders
+      ansible.builtin.command:
+        cmd: microk8s kubectl apply -f /etc/ansible/files/coredns.yaml
+      run_once: true
+      register: coredns_output
+      changed_when: "'configmap/coredns configured' in coredns_output.stdout"
