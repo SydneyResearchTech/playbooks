@@ -119,10 +119,12 @@
 
         - name: Set facts
           ansible.builtin.set_fact:
-            dns_forwarders: "{{ dns_forwarders_output.stdout | split }}"
+            dns_forwarders: "{{ dns_forwarders_output.stdout | split | ansible.utils.ipv4 | list }}"
             dns_search: "{{ dns_search_output.stdout | split }}"
 
         - name: Create bind values file for helm deployment
+          when:
+            - dns_forwarders
           ansible.builtin.copy:
             content: |
               named_options:

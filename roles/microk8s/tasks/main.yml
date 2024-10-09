@@ -95,7 +95,10 @@
           fi
       with_items:
         - "{{ microk8s_enable }}"
-        - "{{ ((microk8s_hostpaths | length > 0) and (microk8s_enable | select('search', 'hostpath-storage') | length == 0)) | ternary(['hostpath-storage'], []) }}"
+        - "{{
+            ((microk8s_hostpaths | length > 0) and (microk8s_enable | select('search', 'hostpath-storage') | length == 0)) |
+            ternary(['hostpath-storage'], [])
+          }}"
       register: enable_addon_output
       changed_when: "'is enabled' in enable_addon_output.stdout"
 
