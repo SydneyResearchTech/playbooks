@@ -4,5 +4,7 @@ if [ -x /snap/bin/microk8s ]; then
   if ! which kubectl >/dev/null; then
     alias kubectl="microk8s kubectl"
     alias helm="microk8s helm3"
+    source <(microk8s kubectl completion bash)
   fi
+  source <(kubectl completion bash)
 fi

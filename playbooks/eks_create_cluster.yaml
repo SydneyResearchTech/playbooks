@@ -59,7 +59,7 @@
           alpha.eksctl.io/cluster-name: "{{ cluster_name }}"
           eksctl.cluster.k8s.io/v1alpha1/cluster-name: "{{ cluster_name }}"
           sydney.edu.au/ou: Research Technology
-          sydney.edu.au/resTek/createBy: dean.taylor@sydney.edu.au
+          sydney.edu.au/resTek/contact: dean.taylor@sydney.edu.au
       register: kms_key_output
         # - ansible.builtin.debug: {var: kms_key_output}
 
@@ -129,7 +129,7 @@
         - cluster_sg_output.security_groups | length > 0
         - cluster_sn_output.subnets | length > 0
       block:
-        - name: GitOps directory creation
+        - name: Flux directories
           ansible.builtin.file:
             mode: "0755"
             path: "{{ flux_dir }}/{{ item }}"
@@ -138,6 +138,15 @@
             - infrastructure/{{ cluster_name }}
             - infrastructure/{{ cluster_name }}/secrets
             - apps/{{ cluster_name }}
+
+        - name: Flux push empty directories
+          ansible.builtin.copy:
+            content: ""
+            dest: "{{ flux_dir }}/{{ item }}"
+            force: false
+            mode: "0644"
+          with_items:
+            - infrastructure/{{ cluster_name }}/secrets/.gitignore
 
         - name: Get kubectl config
           ansible.builtin.command:
