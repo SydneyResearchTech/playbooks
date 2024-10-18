@@ -48,10 +48,10 @@
     backup: true
     block: |
       --oidc-issuer-url={{ microk8s_oidc_issuer }}
-      --oidc-ca-file=${SNAP_DATA}/certs/dex-ca.crt
+      --oidc-ca-file={{ microk8s_oidc_ca_file }}
       --oidc-client-id=kubernetes
-      --oidc-username-claim=email
-      --oidc-username-prefix=dex:
+      --oidc-username-claim={{ microk8s_oidc_username_claim }}
+      --oidc-username-prefix={{ microk8s_oidc_username_prefix }}
       --oidc-groups-claim=groups
     path: "/var/snap/microk8s/current/args/kube-apiserver"
     state: present

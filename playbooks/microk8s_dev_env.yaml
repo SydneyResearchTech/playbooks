@@ -36,6 +36,7 @@
       ansible.builtin.command:
         cmd: microk8s config
       register: microk8s_config_ret
+      changed_when: false
 
     - name: Set facts
       ansible.builtin.set_fact:
@@ -145,7 +146,7 @@
           changed_when: false
           register: helm_list_ret
 
-        - name: Set facts
+        - name: Set facts # noqa: jinja[spacing]
           ansible.builtin.set_fact:
             bind_deployed: "{{ helm_list_ret.stdout | from_json | selectattr('name','search','bind') | list | count > 0 }}"
             dns_forwarders: "{{ dns_forwarders_output.stdout | split | ansible.utils.ipv4 | list }}"

@@ -13,7 +13,11 @@ microk8s_enable:
 
 microk8s_dexidp_enabled: false
 microk8s_dexidp_port: 31000
+
+microk8s_oidc_ca_file: "${SNAP_DATA}/certs/dex-ca.crt"
 microk8s_oidc_issuer: "https://{{ ansible_default_ipv4.address }}:{{ microk8s_dexidp_port }}/dex"
+microk8s_oidc_username_claim: name
+microk8s_oidc_username_prefix: "dex:"
 
 ## \param microk8s_calicoctl_version string calicoctl version to install on host.
 microk8s_calicoctl_version: ""

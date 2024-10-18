@@ -171,7 +171,6 @@
                 cmd: age-keygen
               register: agekey_output
               changed_when: false
-                # - ansible.builtin.debug: {var: agekey_output}
 
             - name: Age secret
               kubernetes.core.k8s:
@@ -187,7 +186,7 @@
                     age.agekey: "{{ agekey_output.stdout | b64encode }}"
                 state: present
 
-            - name: Set Facts
+            - name: Set Facts  # noqa: jinja[spacing]
               ansible.builtin.set_fact:
                 agekey_public: "{{ agekey_output.stdout | regex_search('public key: (.*)$', '\\1',  multiline=True) | first }}"
 
