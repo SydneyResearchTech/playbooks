@@ -44,8 +44,6 @@
     update_repo_cache: true
 
 - name: Dex configure API server to connect to Dex
-  when:
-    - 0 > 1
   ansible.builtin.blockinfile:
     backup: true
     block: |

@@ -3,7 +3,7 @@
   become: true
   vars:
     dns_domain: fake.sydney.edu.au
-
+    helm: "/snap/microk8s/current/bin/helm"
 
   pre_tasks:
     - name: Install Amazon EFS utils
@@ -31,6 +31,15 @@
       ansible.builtin.stat:
         path: /etc/docker
       register: is_docker
+
+    - name: Slurp microk8s config
+      ansible.builtin.command:
+        cmd: microk8s config
+      register: microk8s_config_ret
+
+    - name: Set facts
+      ansible.builtin.set_fact:
+        kubeconfig: "{{ microk8s_config_ret.stdout | from_yaml }}"
 
     - name: Configure Docker daemon
       when:
@@ -81,19 +90,12 @@
       when:
         - named_enabled | default(false) | bool
       block:
-        - name: Update ResTek helm repo
-          ansible.builtin.command:
-            cmd: microk8s helm3 repo update restek
-          changed_when: false
-          register: restek_update_output
-          ignore_errors: true
-
         - name: Add ResTek helm repo
-          when:
-            - "restek_update_output.rc != 0"
-          ansible.builtin.command:
-            cmd: microk8s helm3 repo add restek https://sydneyresearchtech.github.io/charts/
-          changed_when: true
+          kubernetes.core.helm_repository:
+            binary_path: "{{ helm }}"
+            repo_name: restek
+            repo_url: https://sydneyresearchtech.github.io/charts/
+            state: present
 
         - name: DNS forwarders?
           ansible.builtin.shell:
@@ -143,12 +145,6 @@
           changed_when: false
           register: helm_list_ret
 
-        - name: Secret exists tsig?
-          ansible.builtin.command:
-            cmd: microk8s kubectl get secret tsigkey-fake-sydney-edu-au --ignore-not-found
-          changed_when: false
-          register: secrets_ret
-
         - name: Set facts
           ansible.builtin.set_fact:
             bind_deployed: "{{ helm_list_ret.stdout | from_json | selectattr('name','search','bind') | list | count > 0 }}"
@@ -156,15 +152,21 @@
             dns_search: "{{ dns_search_output.stdout | split }}"
             rfc2136_tsig_secret: '{{ tsig_ret.content | b64decode | regex_search("secret\s+.(.*).;$","\1",multiline=True) | first }}'
             rfc2136_tsig_secret_alg: '{{ tsig_ret.content | b64decode | regex_search("algorithm\s+(.*);$","\1",multiline=True) | first }}'
-            rfc2136_zone: '{{ tsig_ret.content | b64decode | regex_search("key\s+.([a-z0-9-.]+).*$","\1",multiline=True) | first }}'
-            tsig_secret_exists: "{{ 'tsigkey-fake-sydney-edu-au' in secrets_ret.stdout }}"
+            rfc2136_tsig_keyname: '{{ tsig_ret.content | b64decode | regex_search("key\s+.([a-z0-9-.]+).*$","\1",multiline=True) | first }}'
 
         - name: Create tsig secret
-          when: not tsig_secret_exists
-          ansible.builtin.shell:
-            cmd: >
-              microk8s kubectl create secret generic tsigkey-fake-sydney-edu-au
-              --from-file=/etc/ansible/.cache/tsigkey-fake.sydney.edu.au
+          kubernetes.core.k8s:
+            apply: true
+            kubeconfig: "{{ kubeconfig }}"
+            state: present
+            definition:
+              apiVersion: v1
+              kind: Secret
+              metadata:
+                name: tsigkey-fake-sydney-edu-au
+                namespace: default
+              data:
+                tsigkey-fake.sydney.edu.au: "{{ tsig_ret.content }}"
           run_once: true
           notify:
             - Update external dns
@@ -184,35 +186,34 @@
             update_repo_cache: true
 
         - name: Get LB IP address?
-          ansible.builtin.command:
-            cmd: >
-              microk8s kubectl get service bind
-              -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
-          changed_when: false
-          register: dns_ip_output
+          kubernetes.core.k8s_info:
+            kind: service
+            kubeconfig: "{{ kubeconfig }}"
+            name: bind
+            namespace: default
+          register: bind_service_info
 
         - name: Slurp coredns config
-          ansible.builtin.command:
-            cmd: microk8s kubectl -n kube-system get configmap/coredns -oyaml
-          changed_when: false
-          register: coredns_output
-        # - ansible.builtin.debug: {var: (coredns_output.stdout|from_yaml)}
+          kubernetes.core.k8s_info:
+            kind: ConfigMap
+            kubeconfig: "{{ kubeconfig }}"
+            name: coredns
+            namespace: kube-system
+          register: coredns_configmap
 
         - name: Set facts
           ansible.builtin.set_fact:
-            dns_server: "{{ dns_ip_output.stdout }}"
-            coredns: "{{ coredns_output.stdout|from_yaml }}"
+            dns_server: "{{ bind_service_info.resources.0.status.loadBalancer.ingress.0.ip }}"
 
         - name: Set facts
           ansible.builtin.set_fact:
             coredns_corefile: '{{
-              (coredns_output.stdout|from_yaml).data.Corefile |
+              coredns_configmap.resources.0.data.Corefile |
               regex_replace(
                 "(\s+forward\s+[a-z0-9.]*\s+[a-f0-9:.]+\n?)+",
                 ("\n%4sforward fake.sydney.edu.au %s\n%4sforward . %s\n"|format("",dns_server,"",(dns_forwarders|first))),
                 multiline=True)
               }}'
-        # - ansible.builtin.debug: {msg: "{{ coredns | combine({'data': {'Corefile': coredns_corefile}}) }}"}
 
         - name: Is /etc/resolv.conf a symlink?
           ansible.builtin.stat:
@@ -242,70 +243,45 @@
             dest: /etc/resolv.conf
             mode: "0644"
 
-        - name: Update microk8s coredns
-          ansible.builtin.copy:
-            content: "{{ coredns_corefile }}"
-            dest: /etc/ansible/.cache/coredns_corefile.yaml
-            mode: "0644"
-          notify:
-            - Set microk8s forwarders
-          register: corefile_status
-
-        - name: Record microk8s forwarders
-          when:
-            - corefile_status.changed
-          ansible.builtin.copy:
-            content: "{{ coredns | combine({'data': {'Corefile': coredns_corefile}}) | to_nice_yaml }}"
-            dest: /etc/ansible/.cache/coredns.yaml
-            mode: "0644"
+        - name: Configure coredns
+          kubernetes.core.k8s:
+            apply: true
+            kubeconfig: "{{ kubeconfig }}"
+            state: present
+            definition: "{{ coredns_configmap.resources.0 | combine({'data': {'Corefile': coredns_corefile}}) }}"
 
         - name: Add external-dns helm repo
-          ansible.builtin.command:
-            cmd: "microk8s helm3 repo add external-dns https://kubernetes-sigs.github.io/external-dns/"
-          register: add_external_dns_ret
-          changed_when: "'already exists with the same configuration, skipping' not in add_external_dns_ret.stdout"
+          kubernetes.core.helm_repository:
+            binary_path: "{{ helm }}"
+            repo_name: external-dns
+            repo_url: "https://kubernetes-sigs.github.io/external-dns/"
+            state: present
 
-        - name: Update external-dns values
-          ansible.builtin.copy:
-            content: |
+        - name: Configure external dns
+          kubernetes.core.helm:
+            binary_path: "{{ helm }}"
+            kubeconfig: "{{ kubeconfig }}"
+            chart_ref: external-dns/external-dns
+            create_namespace: true
+            release_namespace: external-dns
+            name: external-dns
+            values:
               provider: {name: rfc2136}
               extraArgs:
-              - --rfc2136-host={{ dns_server }}
-              - --rfc2136-port=53
-              - --rfc2136-zone={{ rfc2136_zone }}
-              - --rfc2136-tsig-secret={{ rfc2136_tsig_secret }}
-              - --rfc2136-tsig-secret-alg={{ rfc2136_tsig_secret_alg }}
-              - --rfc2136-tsig-keyname=tsigkey-{{ rfc2136_zone }}
-              - --rfc2136-tsig-axfr
-              - --txt-owner-id=k8s
-              - --txt-prefix=external-dns
-              - --domain-filter={{ rfc2136_zone }}
-            dest: /etc/ansible/.cache/external-dns_values.yaml
-            mode: "0600"
-          notify:
-            - Update external dns
-            - Update bind server
+                - --rfc2136-host={{ dns_server }}
+                - --rfc2136-port=53
+                - --rfc2136-zone={{ dns_domain }}
+                - --rfc2136-tsig-secret={{ rfc2136_tsig_secret }}
+                - --rfc2136-tsig-secret-alg={{ rfc2136_tsig_secret_alg }}
+                - --rfc2136-tsig-keyname={{ rfc2136_tsig_keyname }}
+                - --rfc2136-tsig-axfr
+                - --txt-owner-id=k8s
+                - --txt-prefix=external-dns
+                - --domain-filter={{ dns_domain }}
 
   handlers:
-    - name: Set microk8s forwarders
-      ansible.builtin.command:
-        cmd: microk8s kubectl apply -f /etc/ansible/.cache/coredns.yaml
-      run_once: true
-      changed_when: true
-
-    - name: Update external dns
-      ansible.builtin.command:
-        cmd: >
-          microk8s helm upgrade external-dns external-dns/external-dns -i
-          -n external-dns --create-namespace
-          -f /etc/ansible/.cache/external-dns_values.yaml
-      run_once: true
-      changed_when: true
-
     - name: Update bind server
       ansible.builtin.command:
-        cmd: >
-          microk8s helm3 upgrade bind restek/bind -i
-          -f /etc/ansible/.cache/bind_values.yaml
+        cmd: microk8s kubectl rollout restart deployment bind
       run_once: true
       changed_when: true
