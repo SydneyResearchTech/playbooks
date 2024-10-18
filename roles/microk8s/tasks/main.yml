@@ -8,6 +8,23 @@
   when:
     - "'Debian' in ansible_os_family"
 
+- name: Install pre-req. packages
+  ansible.builtin.package:
+    name:
+      - python3-kubernetes
+    state: present
+
+- name: Slurp microk8s config
+  ansible.builtin.command:
+    cmd: microk8s config
+  changed_when: false
+  register: microk8s_config_ret
+
+- name: Set facts
+  ansible.builtin.set_fact:
+    kubeconfig: "{{ microk8s_config_ret.stdout | from_yaml }}"
+    helm: "/snap/microk8s/current/bin/helm"
+
 - name: Wireguard pre-req. for Calico
   ansible.builtin.include_tasks:
     file: "{{ item }}"
@@ -30,11 +47,22 @@
     cmd: snap install microk8s --classic
     creates: /snap/microk8s
 
+- name: Install helm diff plugin
+  ansible.builtin.shell:
+    cmd: |
+      set -eo pipefail
+      {{ helm }} plugin list | grep -q '^diff\s' || \
+      {{ helm }} plugin install https://github.com/databus23/helm-diff
+    executable: /bin/bash
+  register: helm_diff_ret
+  changed_when: "'diff' in helm_diff_ret.stdout"
+
 - name: Microk8s status?
   ansible.builtin.command:
     cmd: microk8s status --format yaml --wait-ready --timeout 60
   register: microk8s_status_output
   changed_when: false
+
 - name: Set facts
   ansible.builtin.set_fact:
     microk8s_status: "{{ microk8s_status_output.stdout | from_yaml }}"
@@ -81,8 +109,9 @@
   # delegate_to: cluster_lead
   block:
     - name: Microk8s enable addons
-      ansible.builtin.shell: # noqa: no-changed-when
+      ansible.builtin.shell:
         cmd: |
+          set -eo pipefail
           ADDON="{{ item }}"
           if [[ $ADDON == gpu ]]; then
             microk8s enable gpu --set toolkit.enabled=false
@@ -93,6 +122,7 @@
           else
             microk8s enable ${ADDON}
           fi
+        executable: /bin/bash
       with_items:
         - "{{ microk8s_enable }}"
         - "{{
@@ -119,10 +149,11 @@
         - "microk8s_hostpaths|length>0"
 
     - name: Class local-storage
-      ansible.builtin.shell:
-        cmd: |
-          set -o pipefail
-          cat <<EOT |microk8s kubectl apply -f -
+      kubernetes.core.k8s:
+        apply: true
+        kubeconfig: "{{ kubeconfig }}"
+        state: present
+        definition:
           apiVersion: storage.k8s.io/v1
           kind: StorageClass
           metadata:
@@ -130,10 +161,11 @@
           provisioner: kubernetes.io/no-provisioner
           reclaimPolicy: Delete
           volumeBindingMode: WaitForFirstConsumer
-          EOT
-        executable: /bin/bash
-      register: sc_local_storage
-      changed_when: "'storageclass.storage.k8s.io/local-storage unchanged' not in sc_local_storage.stdout"
+
+    - name: Install DexIdP OIDC provider
+      when:
+        - microk8s_dexidp_enabled
+      ansible.builtin.import_tasks: dex.yml
 
 - name: Manage local-storage
   ansible.builtin.import_tasks: local-storage.yml
@@ -141,4 +173,4 @@
 - name: Calicoctl
   ansible.builtin.import_tasks: calicoctl.yml
   when:
-    - "microk8s_calicoctl_version|length>0"
+    - "microk8s_calicoctl_version | length > 0"

@@ -1,0 +1,61 @@
+---
+# role/microk8s/tasks/dex.yml
+# https://microk8s.io/docs/oidc-dex
+#
+- name: Dex slurp ca.crt
+  ansible.builtin.command:
+    cmd: microk8s kubectl -n cert-manager get secrets selfsigned-ca-secret -ojson
+  changed_when: false
+  register: ca_cert_ret
+
+- name: Dex set facts
+  ansible.builtin.set_fact:
+    ca_cert: "{{ ca_cert_ret.stdout | from_json }}"
+
+- name: Dex certs secret
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig }}"
+    state: present
+    template:
+      path: dex_certs_secret.yaml.j2
+  register: dex_secret_ret
+
+- name: Dex ca.crt
+  ansible.builtin.copy:
+    content: "{{ ca_cert['data']['ca.crt'] | b64decode }}"
+    dest: /var/snap/microk8s/current/certs/dex-ca.crt
+    mode: "0644"
+
+- name: Dex helm repo
+  kubernetes.core.helm_repository:
+    binary_path: /snap/microk8s/current/bin/helm
+    name: dex
+    repo_url: https://charts.dexidp.io
+
+- name: Dex deployment
+  kubernetes.core.helm:
+    binary_path: /snap/microk8s/current/bin/helm
+    name: dex
+    namespace: default
+    chart_ref: dex/dex
+    state: present
+    values: "{{ lookup('ansible.builtin.template', 'dex_values.yaml.j2') | from_yaml }}"
+    kubeconfig: "{{ kubeconfig }}"
+    update_repo_cache: true
+
+- name: Dex configure API server to connect to Dex
+  when:
+    - 0 > 1
+  ansible.builtin.blockinfile:
+    backup: true
+    block: |
+      --oidc-issuer-url={{ microk8s_oidc_issuer }}
+      --oidc-ca-file=${SNAP_DATA}/certs/dex-ca.crt
+      --oidc-client-id=kubernetes
+      --oidc-username-claim=email
+      --oidc-username-prefix=dex:
+      --oidc-groups-claim=groups
+    path: "/var/snap/microk8s/current/args/kube-apiserver"
+    state: present
+  notify:
+    - Restart microk8s

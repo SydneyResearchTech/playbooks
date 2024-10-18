@@ -11,6 +11,10 @@ microk8s_enable:
   - rbac
   - registry
 
+microk8s_dexidp_enabled: false
+microk8s_dexidp_port: 31000
+microk8s_oidc_issuer: "https://{{ ansible_default_ipv4.address }}:{{ microk8s_dexidp_port }}/dex"
+
 ## \param microk8s_calicoctl_version string calicoctl version to install on host.
 microk8s_calicoctl_version: ""
 # microk8s_calicoctl_version: v3.25.1

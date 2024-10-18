@@ -1,0 +1,35 @@
+---
+# microk8s helm3 upgrade bind restek/bind -i -f /etc/ansible/.cache/bind_values.yaml
+named_options:
+  forwarders: {{ dns_forwarders | to_json }}
+  forward_only: true
+  dnssec_validation: "no"
+  extra: ""
+named_zones:
+  - name: fake.sydney.edu.au
+    type: master
+    extra: |
+      allow-transfer { key "tsigkey-fake.sydney.edu.au"; };
+      update-policy { grant tsigkey-fake.sydney.edu.au zonesub ANY; };
+    zone: |
+      $TTL 60
+      $ORIGIN fake.sydney.edu.au.
+      @ IN SOA fake.sydney.edu.au. root.fake.sydney.edu.au. (1 60 60 60 60);
+      @ IN NS {{ ansible_fqdn }}.
+service:
+  type: LoadBalancer
+resources:
+  limits:
+    cpu: 2
+    memory: 500Mi
+  requests:
+    cpu: 100m
+    memory: 100Mi
+volumes:
+  - name: tsigkey-fake-sydney-edu-au
+    secret:
+      secretName: tsigkey-fake-sydney-edu-au
+volumeMounts:
+  - name: tsigkey-fake-sydney-edu-au
+    mountPath: /etc/bind/named.conf.secret.d
+    readOnly: true

@@ -33,7 +33,8 @@
     - name: Facts
       ansible.builtin.set_fact:
         default_ami: "{{ amis.images | last }}"
-        default_subnet: "{{ subnets.subnets|selectattr('map_public_ip_on_launch','equalto',true)|sort(attribute='available_ip_address_count')|last }}"
+        default_subnet: "{{ subnets.subnets | selectattr('map_public_ip_on_launch', 'equalto', true) |
+          sort(attribute='available_ip_address_count') | last }}"
 
     - name: Default AMI
       ansible.builtin.debug:

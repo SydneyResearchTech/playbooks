@@ -3,10 +3,12 @@
 profile: null
 
 exclude_paths:
+  - .*.swp
   - .cache/
   - .git*
   - roles/vpn/
   - tmp/
 
 skip_list:
+  - run-once[task]
   - schema[changelog]
