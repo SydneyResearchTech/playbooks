@@ -1,21 +1,39 @@
 ---
+# https://ubuntu.com/server/docs/nvidia-drivers-installation
 # https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html
-- name: WORKAROUND. Install distribution NVIDIA toolkit
+- name: NVIDIA drivers and CUDA toolkit
   hosts: "{{ target|default('all') }}"
   become: true
 
   tasks:
+    - name: NVIDIA recommended driver?
+      ansible.builtin.command:
+        cmd: ubuntu-drivers list --gpgpu --recommended
+      changed_when: false
+      register: nvidia_driver_recommend
+    # - ansible.builtin.debug: {var: nvidia_driver_recommend}
+
     - name: Facts
       ansible.builtin.set_fact:
         distro: "{{ [(ansible_distribution | lower), (ansible_distribution_version | split('.') | join())] | join() }}"
         arch: "{{ ansible_architecture }}"
+        nvidia_driver_branch: "{{ (nvidia_driver_recommend.stdout_lines.0).split('-').2 }}"
+
+    - name: NVIDIA driver package exists?
+      ansible.builtin.shell:
+        cmd: >
+          set -o pipefail;
+          apt-cache policy nvidia-dkms-{{ nvidia_driver_branch }}-server |
+          grep -v nvidia-dkms-{{ nvidia_driver_branch }}-server
+        executable: /bin/bash
+      changed_when: false
 
     - name: Remove previous CUDA toolkit
       ansible.builtin.command:
         cmd: /usr/local/cuda-11.7/bin/cuda-uninstaller --silent
         removes: /usr/local/cuda-11.7/bin/cuda-uninstaller
 
-    - name: Remove previous nvidia drivers
+    - name: Remove manually installed nvidia drivers
       ansible.builtin.command:
         cmd: /usr/bin/nvidia-uninstall
         removes: /usr/bin/nvidia-uninstall
@@ -27,6 +45,17 @@
           - linux-headers-{{ ansible_kernel }}
         state: present
         update_cache: true
+
+    - name: Install NVIDIA driver
+      ansible.builtin.package:
+        name:
+          - nvidia-dkms-{{ nvidia_driver_branch }}-server
+          - nvidia-driver-{{ nvidia_driver_branch }}-server
+          - nvidia-utils-{{ nvidia_driver_branch }}-server
+          - nvidia-fabricmanager-{{ nvidia_driver_branch }}
+          - libnvidia-nscq-{{ nvidia_driver_branch }}
+      notify:
+        - Reboot
 
     # sudo apt-key del 7fa2af80
     - name: Deleted old NVIDIA repo Apt key
@@ -63,9 +92,9 @@
           - nvidia-gds
         state: present
         update_cache: true
-      register: install_cuda_tookit
+      notify:
+        - Reboot
 
-    - name: Reboot if required
-      ansible.builtin.reboot: # noqa no-handler
-      when:
-        - install_cuda_tookit.changed
+  handlers:
+    - name: Reboot
+      ansible.builtin.reboot:
