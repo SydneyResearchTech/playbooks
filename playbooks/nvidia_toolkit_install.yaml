@@ -38,7 +38,20 @@
         cmd: /usr/bin/nvidia-uninstall
         removes: /usr/bin/nvidia-uninstall
 
-    - name: Install NVIDIA packages pre-req
+    - name: Gather package facts
+      ansible.builtin.package_facts:
+        manager: auto
+
+    - name: Remove pre-compiled NVIDIA modules if installed
+      when:
+        - ansible_facts.packages | select('search', '^linux-modules-nvidia-') | list | length > 0
+      ansible.builtin.apt:
+        name:
+          - "*nvidia*"
+        purge: true
+        state: absent
+
+    - name: Install NVIDIA packages pre-req.
       ansible.builtin.apt:
         cache_valid_time: 86400
         name:
