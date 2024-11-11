@@ -49,13 +49,13 @@ ansible-pull -clocal -i,localhost \
 
 | Playbook | Purpose | Notes |
 | -------- | ------- | ----- |
-| apt_upgrade_reboot |
-| aws_sshd_pwd_enable |
-| aws_vrd_dev_lab |
-| edge_compute |
-| [eks_create_cluster](docs/eks_create_cluster.md) | Deploy an EKS cluster |
-| microk8s_dev_env | Kubernetes cluster for development. Incorporating DNS resolution and configuration management, Certificate management, Load balancer and Ingress controller. | Uses include OIDC and other authentication integration work. Simulation of full disparate service. Includes full DNS provider functionality. |
-| nvidia_toolkit_install |
+| apt_upgrade_reboot | Run full system update and reboot if required. |
+| aws_sshd_pwd_enable | Enable/disable SSH password access and optionally set user password. |
+| aws_vrd_dev_lab | Configure a Virtual Research Desktop lab in AWS. |
+| edge_compute | Configure baseline edge compute host. |
+| [eks_create_cluster](docs/eks_create_cluster.md) | Deploy an EKS cluster. |
+| microk8s_dev_env | Kubernetes cluster for development. Incorporating DNS resolution and configuration management, Certificate management, Load balancer and Ingress controller. | *WARNING; Alters the host system!* Uses include OIDC and other authentication integration work. Simulation of full disparate service. Includes full DNS provider functionality. |
+| nvidia_toolkit_install | Install/configure NVIDIA drivers, toolkit and CUDA. |
 
 ## Roles
 
@@ -129,7 +129,7 @@ ansible-pull -e 'target=microk8s' --check --diff \
  playbooks/edge_compute.yaml
 
 # Run playbook
-ansible-pull -e 'target=microk8s' --check --diff \
+ansible-pull -e 'target=microk8s' \
  -U https://github.com/SydneyResearchTech/playbooks.git \
  -d ~/.ansible/collections/ansible_collections/restek.core \
  playbooks/edge_compute.yaml
