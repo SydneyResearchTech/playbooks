@@ -14,17 +14,6 @@
       - python3-kubernetes
     state: present
 
-- name: Slurp microk8s config
-  ansible.builtin.command:
-    cmd: microk8s config
-  changed_when: false
-  register: microk8s_config_ret
-
-- name: Set facts
-  ansible.builtin.set_fact:
-    kubeconfig: "{{ microk8s_config_ret.stdout | from_yaml }}"
-    helm: "/snap/microk8s/current/bin/helm"
-
 - name: Wireguard pre-req. for Calico
   ansible.builtin.include_tasks:
     file: "{{ item }}"
@@ -42,20 +31,10 @@
         - snapd/install-{{ ansible_distribution }}.yml
         - snapd/install.yml
 
-- name: Microk8s install
+- name: Install microk8s
   ansible.builtin.command:
     cmd: snap install microk8s --classic
     creates: /snap/microk8s
-
-- name: Install helm diff plugin
-  ansible.builtin.shell:
-    cmd: |
-      set -eo pipefail
-      {{ helm }} plugin list | grep -q '^diff\s' || \
-      {{ helm }} plugin install https://github.com/databus23/helm-diff
-    executable: /bin/bash
-  register: helm_diff_ret
-  changed_when: "'diff' in helm_diff_ret.stdout"
 
 - name: Microk8s status?
   ansible.builtin.command:
@@ -63,9 +42,39 @@
   register: microk8s_status_output
   changed_when: false
 
+- name: Slurp microk8s config
+  ansible.builtin.command:
+    cmd: microk8s kubectl config view --output=json --raw=true
+  changed_when: false
+  register: microk8s_config_ret
+
+- name: Install helm diff plugin
+  ansible.builtin.shell:
+    cmd: |
+      set -eo pipefail
+      {{ microk8s_helm }} plugin list | grep -q '^diff\s' || \
+      {{ microk8s_helm }} plugin install https://github.com/databus23/helm-diff
+    executable: /bin/bash
+  register: helm_diff_ret
+  changed_when: "'diff' in helm_diff_ret.stdout"
+
 - name: Set facts
   ansible.builtin.set_fact:
     microk8s_status: "{{ microk8s_status_output.stdout | from_yaml }}"
+    kubeconfig: "{{ microk8s_config_ret.stdout | from_json }}"
+
+- name: Update server certificate
+  ansible.builtin.blockinfile:
+    block: |
+      DNS.6 = {{ ansible_fqdn }}
+      DNS.7 = {{ ansible_hostname }}.local
+      DNS.8 = {{ ansible_hostname }}
+      IP.3 = {{ ansible_default_ipv4.address }}
+    insertafter: "#MOREIPS"
+    path: /var/snap/microk8s/current/certs/csr.conf.template
+    state: present
+  notify:
+    - Refresh server certificate
 
 - name: Create /etc/profile.d/microk8s.sh
   ansible.builtin.copy:

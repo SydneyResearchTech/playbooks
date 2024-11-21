@@ -1,0 +1,6 @@
+---
+# handlers file for nvidia
+- name: Reboot
+  when:
+    - nvidia_reboot_enabled
+  ansible.builtin.reboot:

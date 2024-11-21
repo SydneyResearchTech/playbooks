@@ -170,7 +170,6 @@
                 tsigkey-fake.sydney.edu.au: "{{ tsig_ret.content }}"
           run_once: true
           notify:
-            - Update external dns
             - Update bind server
 
         - name: Deploy bind9
@@ -184,7 +183,7 @@
             state: present
             values: "{{ lookup('ansible.builtin.template', 'bind9_values.yaml.j2') | from_yaml }}"
             kubeconfig: "{{ kubeconfig }}"
-            update_repo_cache: true
+            update_repo_cache: false
 
         - name: Get LB IP address?
           kubernetes.core.k8s_info:
@@ -211,45 +210,33 @@
             coredns_corefile: '{{
               coredns_configmap.resources.0.data.Corefile |
               regex_replace(
-                "(\s+forward\s+[a-z0-9.]*\s+[a-f0-9:.]+\n?)+",
-                ("\n%4sforward fake.sydney.edu.au %s\n%4sforward . %s\n"|format("",dns_server,"",(dns_forwarders|first))),
+                "(\s+forward\s.*\n?)+",
+                ("\n%4sforward fake.sydney.edu.au. %s\n%4sforward . /etc/resolv.conf\n"|format("",dns_server,"")),
                 multiline=True)
               }}'
+        # - ansible.builtin.debug:
+        #     var: coredns_corefile
 
-        - name: Is /etc/resolv.conf a symlink?
-          ansible.builtin.stat:
-            path: /etc/resolv.conf
-          register: resolv_conf
-
-        - name: Update /etc/resolv.conf
-          when: resolv_conf.stat.islnk
-          block:
-            - name: Unlink /etc/resolv.conf from systemd-resolved
-              ansible.builtin.command:
-                cmd: unlink /etc/resolv.conf
-                removes: /etc/resolv.conf
-
-            - name: Copy /run/systemd/resolve/stub-resolv.conf to /etc/resolv.conf
-              ansible.builtin.shell: # noqa: command-instead-of-module
-                cmd: sed -n -e '/^#/!p' /run/systemd/resolve/stub-resolv.conf >/etc/resolv.conf
-                creates: /etc/resolv.conf
-
-        - name: Update /etc/resolv.conf
-          ansible.builtin.copy:
-            content: |
-              nameserver {{ dns_server }}
-              nameserver {{ dns_forwarders | first }}
-              options edns0 trust-ad
-              search fake.sydney.edu.au {{ dns_search | join(" ") }}
-            dest: /etc/resolv.conf
-            mode: "0644"
-
-        - name: Configure coredns
+        - name: Update coredns
+          when:
+            - "'forward fake.sydney.edu.au.' not in coredns_configmap.resources.0.data.Corefile"
           kubernetes.core.k8s:
             apply: true
             kubeconfig: "{{ kubeconfig }}"
             state: present
             definition: "{{ coredns_configmap.resources.0 | combine({'data': {'Corefile': coredns_corefile}}) }}"
+          notify:
+            - Restart coredns
+
+        - name: Update resolved
+          ansible.builtin.copy:
+            content: |
+              [Resolve]
+              DNS={{ dns_server }}#fake.sydney.edu.au
+            dest: /etc/systemd/resolved.conf.d/50_microk8s_external_dns.conf
+            mode: "0644"
+          notify:
+            - Restart resolved
 
         - name: Add external-dns helm repo
           kubernetes.core.helm_repository:
@@ -284,5 +271,11 @@
     - name: Update bind server
       ansible.builtin.command:
         cmd: microk8s kubectl rollout restart deployment bind
+      changed_when: false
       run_once: true
-      changed_when: true
+
+    - name: Restart coredns
+      ansible.builtin.command:
+        cmd: microk8s kubectl -n kube-system rollout restart deployment coredns
+      changed_when: false
+      run_once: true

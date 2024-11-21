@@ -1,0 +1,78 @@
+# role/nvidia/tasks/install_driver_Ubuntu.yml
+#
+- name: NVIDIA recommended driver?
+  ansible.builtin.command:
+    cmd: ubuntu-drivers list --gpgpu --recommended
+  changed_when: false
+  register: nvidia_driver_recommend
+# - ansible.builtin.debug: {var: nvidia_driver_recommend}
+
+- name: Set fact
+  ansible.builtin.set_fact:
+    nvidia_driver_branch: "{{ (nvidia_driver_recommend.stdout_lines.0).split('-').2 }}"
+
+- name: NVIDIA driver package exists?
+  ansible.builtin.shell:
+    cmd: >
+      set -o pipefail;
+      apt-cache policy nvidia-dkms-{{ nvidia_driver_branch }}-server |
+      grep -v nvidia-dkms-{{ nvidia_driver_branch }}-server
+    executable: /bin/bash
+  changed_when: false
+
+- name: Remove manually installed nvidia drivers
+  ansible.builtin.command:
+    cmd: /usr/bin/nvidia-uninstall
+    removes: /usr/bin/nvidia-uninstall
+
+- name: Gather package facts
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Remove pre-compiled NVIDIA modules if installed
+  when:
+    - ansible_facts.packages | select('search', '^linux-modules-nvidia-') | list | length > 0
+  ansible.builtin.apt:
+    name:
+      - "*nvidia*"
+    purge: true
+    state: absent
+
+- name: Install NVIDIA packages pre-req.
+  ansible.builtin.apt:
+    cache_valid_time: 86400
+    name:
+      - linux-headers-{{ ansible_kernel }}
+    state: present
+    update_cache: true
+
+- name: Install NVIDIA driver
+  ansible.builtin.package:
+    name:
+      - nvidia-dkms-{{ nvidia_driver_branch }}-server
+      - nvidia-driver-{{ nvidia_driver_branch }}-server
+  notify:
+    - Reboot
+
+- name: Install NVIDIA utilities
+  when:
+    - nvidia_utilities_enabled
+  ansible.builtin.package:
+    name: nvidia-utils-{{ nvidia_driver_branch }}-server
+    state: present
+
+- name: Install NVIDIA fabric manager
+  when:
+    - nvidia_fabric_manager_enabled
+  ansible.builtin.package:
+    name: nvidia-fabricmanager-{{ nvidia_driver_branch }}
+    state: present
+  notify:
+    - Reboot
+
+- name: Install NVSwitch Configuration and Query (NSCQ) library
+  when:
+    - nvidia_nscq_enabled
+  ansible.builtin.package:
+    name: libnvidia-nscq-{{ nvidia_driver_branch }}
+    state: present

@@ -4,6 +4,17 @@
   ansible.builtin.command: # noqa: no-changed-when
     cmd: systemd-tmpfiles --create
 
+- name: Refresh server certificate
+  ansible.builtin.command:
+    cmd: microk8s refresh-certs --cert server.crt
+  changed_when: false
+
+- name: Restart resolved
+  ansible.builtin.service:
+    name: systemd-resolved.service
+    state: restarted
+
 - name: Restart microk8s
-  ansible.builtin.command: # noqa: no-changed-when
+  ansible.builtin.command:
     cmd: snap restart microk8s
+  changed_when: false

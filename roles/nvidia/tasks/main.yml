@@ -1,0 +1,41 @@
+---
+# tasks file for nvidia
+- name: Set facts
+  ansible.builtin.set_fact:
+    distro: "{{ [(ansible_distribution | lower), (ansible_distribution_version | split('.') | join())] | join() }}"
+    arch: "{{ ansible_architecture }}"
+
+- name: Install NVIDIA driver
+  when:
+    - nvidia_driver_enabled
+  ansible.builtin.include_tasks:
+    file: "{{ item }}"
+  with_first_found:
+    - files:
+        - install_driver_{{ ansible_distribution }}.yml
+
+- name: Install CUDA repository
+  when:
+    - nvidia_cuda_toolkit_enabled or
+      nvidia_gds_enabled
+  ansible.builtin.include_tasks:
+    file: "{{ item }}"
+  with_first_found:
+    - files:
+        - install_cuda_toolkit_{{ ansible_os_family }}.yml
+
+- name: Install CUDA toolkit
+  when:
+    - nvidia_cuda_toolkit_enabled
+  ansible.builtin.package:
+    name: cuda-toolkit
+    state: present
+
+- name: Install GPUDirect Storage
+  when:
+    - nvidia_gds_enabled
+  ansible.builtin.package:
+    name: nvidia-gds
+    state: present
+  notify:
+    - Reboot

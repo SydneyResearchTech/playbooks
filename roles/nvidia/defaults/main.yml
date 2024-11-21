@@ -1,0 +1,13 @@
+---
+# defaults file for nvidia
+nvidia_cuda_toolkit_enabled: true
+nvidia_driver_enabled: true
+# If not set a recommended driver version will be used; NOT SUPPORTED YET
+nvidia_driver_version: ""
+nvidia_utilities_enabled: true
+nvidia_fabric_manager_enabled: true
+# NVSwitch Configuration and Query (NSCQ)
+nvidia_nscq_enabled: true
+# GPUDirect Storage
+nvidia_gds_enabled: true
+nvidia_reboot_enabled: false

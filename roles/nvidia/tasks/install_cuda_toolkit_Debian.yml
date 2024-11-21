@@ -1,0 +1,28 @@
+# role/nvidia/tasks/install_cuda_toolkit_Debian.yml
+#
+# sudo apt-key del 7fa2af80
+- name: Deleted old NVIDIA repo Apt key
+  ansible.builtin.apt_key:
+    id: "7fa2af80"
+    state: absent
+
+- name: Install new cuda-keyring
+  ansible.builtin.apt:
+    deb: https://developer.download.nvidia.com/compute/cuda/repos/{{ distro }}/{{ arch }}/cuda-keyring_1.1-1_all.deb
+    state: present
+
+- name: Add CUDA repo
+  ansible.builtin.apt_repository:
+    filename: cuda-{{ distro }}-{{ arch }}
+    mode: "0644"
+    repo: >
+      deb [signed-by=/usr/share/keyrings/cuda-archive-keyring.gpg]
+      https://developer.download.nvidia.com/compute/cuda/repos/{{ distro }}/{{ arch }}/ /
+    state: present
+    update_cache: true
+
+- name: Add pin file to prioritize CUDA repo
+  ansible.builtin.get_url:
+    dest: /etc/apt/preferences.d/cuda-repository-pin-600
+    mode: "0644"
+    url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distro }}/{{ arch }}/cuda-{{ distro }}.pin

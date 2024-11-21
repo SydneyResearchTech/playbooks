@@ -2,3 +2,4 @@
 # vars file for microk8s
 #
 microk8s_packages: []
+microk8s_helm: "/snap/microk8s/current/bin/helm"
