@@ -1,0 +1,17 @@
+---
+# Common vulnerabilities and exposures (CVE)
+#
+- name: CVE(s) mitigation
+  hosts: "{{ target|default('all') }}"
+  become: true
+
+  tasks:
+    - name: Needrestart disable interpreter scanners
+      # CVE-2024-48990,48991,48992,10224,11003
+      ansible.builtin.lineinfile:
+        backup: true
+        line: "$nrconf{interpscan} = 0;"
+        path: /etc/needrestart/needrestart.conf
+        regexp: '\$nrconf{interpscan}'
+        state: present
+      ignore_errors: true
