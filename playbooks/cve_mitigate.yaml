@@ -14,4 +14,4 @@
         path: /etc/needrestart/needrestart.conf
         regexp: '\$nrconf{interpscan}'
         state: present
-      ignore_errors: true
+      failed_when: false

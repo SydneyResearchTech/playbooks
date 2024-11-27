@@ -8,6 +8,7 @@ exclude_paths:
   - .git*
   - roles/vpn/
   - tmp/
+  - /requirements.yml
 
 skip_list:
   - run-once[task]
