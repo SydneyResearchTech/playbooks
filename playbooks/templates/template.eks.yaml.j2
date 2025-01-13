@@ -16,20 +16,15 @@ addons:
   - name: kube-proxy
   - name: coredns
   - name: eks-pod-identity-agent
+{% if not calico_enabled %}
+  - name: vpc-cni
+{% endif %}
 {% for addon in addons %}
   - name: {{ addon }}
 {% endfor %}
 
-gitops:
-  flux:
-    gitProvider: "github"
-    flags:
-      owner: SydneyResearchTech
-      path: clusters/{{ cluster_name }}
-      repository: gitops-flux
-      branch: main
-
 iam:
+{% if not bootstrap %}
   # Karpenter pre-req. cloudformation template, see docs
   podIdentityAssociations:
     - namespace: kube-system
@@ -56,7 +51,7 @@ iam:
       attachPolicyARNs:
         - arn:aws:iam::aws:policy/AmazonRDSFullAccess
       roleOnly: false
-
+{% endif %}
   withOIDC: true
 
 iamIdentityMappings:
@@ -68,6 +63,16 @@ iamIdentityMappings:
       ## If you intend to run Windows workloads, the kube-proxy group should be specified.
       # For more information, see https://github.com/aws/karpenter/issues/5099.
       # - eks:kube-proxy-windows
+
+{% if not bootstrap %}
+gitops:
+  flux:
+    gitProvider: "github"
+    flags:
+      owner: SydneyResearchTech
+      path: clusters/{{ cluster_name }}
+      repository: gitops-flux
+      branch: main
 
 # https://eksctl.io/usage/eksctl-karpenter/
 # https://github.com/aws/karpenter-provider-aws/releases
@@ -85,15 +90,20 @@ managedNodeGroups:
     disablePodIMDS: false
     instanceType: m7g.4xlarge
     minSize: 3
-    maxSize: 10
+    maxSize: 9
     desiredCapacity: 3
     volumeSize: 100
+    labels:
+      sydney.edu.au/nodeRole: system
     tags:
       "uni:billing:application": "xnat"
       "uni:billing:support": "unmanaged"
       "uni:operations:backup": "none"
+      sydney.edu.au/ou: Research Technology
+      sydney.edu.au/resTek/contact: ais.admin@sydney.edu.au
     updateConfig:
       maxUnavailable: 1
+{% endif %}
 
 vpc:
   clusterEndpoints:

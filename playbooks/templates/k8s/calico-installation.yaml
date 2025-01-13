@@ -1,0 +1,48 @@
+apiVersion: operator.tigera.io/v1
+kind: Installation
+metadata:
+  name: default
+spec:
+  calicoNetwork:
+    bgp: Disabled
+    hostPorts: Enabled
+    ipPools:
+    - allowedUses:
+      - Workload
+      - Tunnel
+      blockSize: 26
+      cidr: 172.16.0.0/16
+      disableBGPExport: false
+      disableNewAllocations: false
+      encapsulation: VXLAN
+      name: default-ipv4-ippool
+      natOutgoing: Enabled
+      nodeSelector: all()
+    linuxDataplane: Iptables
+    linuxPolicySetupTimeoutSeconds: 0
+    multiInterfaceMode: None
+    nodeAddressAutodetectionV4:
+      canReach: 8.8.8.8
+    windowsDataplane: Disabled
+  cni:
+    ipam:
+      type: Calico
+    type: Calico
+  controlPlaneNodeSelector:
+    sydney.edu.au/nodeRole: system
+  controlPlaneReplicas: 3
+  flexVolumePath: /usr/libexec/kubernetes/kubelet-plugins/volume/exec/
+  kubeletVolumePluginPath: /var/lib/kubelet
+  kubernetesProvider: EKS
+  logging:
+    cni:
+      logFileMaxAgeDays: 30
+      logFileMaxCount: 10
+      logFileMaxSize: 100Mi
+      logSeverity: Info
+  nodeUpdateStrategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
+  nonPrivileged: Disabled
+  variant: Calico

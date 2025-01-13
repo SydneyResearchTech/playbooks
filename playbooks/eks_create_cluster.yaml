@@ -1,5 +1,5 @@
 ---
-# collection/playbooks/eks_create_cluster.yaml
+# restek.core.eks_create_cluster collection playbook
 # ansible-playbook -e 'cluster_name=restek-dev' restek.core.eks_create_cluster
 # python3 -m pip install kubernetes
 #
@@ -9,27 +9,31 @@
   connection: local
   vars:
     addons:
-      - vpc-cni
       - aws-ebs-csi-driver
       - aws-efs-csi-driver
       - snapshot-controller
       # - aws-mountpoint-s3-csi-driver
       # - amazon-cloudwatch-observability
     aws_profile: default
-    calico_cidr: "100.10.0.0/10"
-    calico_enabled: false
+    calico_enabled: true
+    calico_ipv4pool_cidr: "172.16.0.0/16"
+    calico_version: "3.29.1"
     clobber: false
     # cluster_name: ansible-template
     karpenter_namespace: kube-system
-    karpenter_version: "0.37.0"
-    kubernetes_version: "1.29"
+    karpenter_version: "1.1.1"
+    kubernetes_version: "1.31"
     vpc_cidr: "192.168.0.0/16"
+    vpc_id: ""
 
   pre_tasks:
     - name: Mandatory variables?
       ansible.builtin.assert:
         that:
           - cluster_name is defined and cluster_name is regex("^[a-z0-9][a-z0-9-]+")
+    # cmd: aws guardduty list-detectors --output=json
+    # cmd: aws guardduty get-detector --output=json --detector-id ####################
+    # |jq '{.Features|select(Name==EKS_RUNTIME_MONITORING)|.Status}' DISABLED|ENABLED
 
   roles: []
 
@@ -45,7 +49,7 @@
         cmd: aws sts get-caller-identity --profile {{ aws_profile }} --output text --query 'Account'
       changed_when: false
       register: aws_account_id_output
-        # - ansible.builtin.debug: {var: aws_account_id_output}
+    # - ansible.builtin.debug: {var: aws_account_id_output}
 
     - name: AWS KMS create key
       amazon.aws.kms_key:
@@ -59,9 +63,9 @@
           alpha.eksctl.io/cluster-name: "{{ cluster_name }}"
           eksctl.cluster.k8s.io/v1alpha1/cluster-name: "{{ cluster_name }}"
           sydney.edu.au/ou: Research Technology
-          sydney.edu.au/resTek/contact: dean.taylor@sydney.edu.au
+          sydney.edu.au/resTek/contact: ais.admin@sydney.edu.au
       register: kms_key_output
-        # - ansible.builtin.debug: {var: kms_key_output}
+    # - ansible.builtin.debug: {var: kms_key_output}
 
     - name: Set facts
       ansible.builtin.set_fact:
@@ -98,6 +102,18 @@
       when:
         - karpenter_cfn_output.status == 200
 
+    - name: Create EKS cluster bootstrap for Calico CNI
+      when:
+        - calico_enabled
+      ansible.builtin.template:
+        backup: true
+        dest: "{{ flux_dir }}/clusters/{{ cluster_name }}-bootstrap.eks.yaml"
+        lstrip_blocks: true
+        mode: "0644"
+        src: template.eks.yaml.j2
+      vars:
+        bootstrap: true
+
     - name: Create EKS cluster template file
       ansible.builtin.template:
         backup: true
@@ -105,6 +121,8 @@
         lstrip_blocks: true
         mode: "0644"
         src: template.eks.yaml.j2
+      vars:
+        bootstrap: false
 
     - name: Get EKS cluster SG
       amazon.aws.ec2_security_group_info:
@@ -113,7 +131,7 @@
           "tag:aws:eks:cluster-name": "{{ cluster_name }}"
         profile: "{{ aws_profile }}"
       register: cluster_sg_output
-        # - ansible.builtin.debug: {var: cluster_sg_output}
+    # - ansible.builtin.debug: {var: cluster_sg_output}
 
     - name: Get EKS cluster subnets
       amazon.aws.ec2_vpc_subnet_info:
@@ -122,13 +140,126 @@
           "tag:kubernetes.io/role/elb": 1
         profile: "{{ aws_profile }}"
       register: cluster_sn_output
-        # - ansible.builtin.debug: {var: cluster_sn_output}
+    # - ansible.builtin.debug: {var: cluster_sn_output}
 
     - name: Post EKS cluster creation
       when:
         - cluster_sg_output.security_groups | length > 0
         - cluster_sn_output.subnets | length > 0
       block:
+        - name: Get kubectl config
+          ansible.builtin.command:
+            cmd: >
+              aws eks update-kubeconfig --name {{ cluster_name }}
+              --profile {{ aws_profile }}
+              --kubeconfig /dev/null --dry-run
+          register: kubeconfig_output
+          changed_when: false
+
+        - name: Set Facts
+          ansible.builtin.set_fact:
+            kubeconfig: "{{ kubeconfig_output.stdout | from_yaml }}"
+
+        - name: Calico installation
+          when:
+            - calico_enabled
+          block:
+            - name: K8s cluster info
+              kubernetes.core.k8s_cluster_info:
+                kubeconfig: "{{ kubeconfig }}"
+              register: k8s_cluster_info_output
+
+            # https://docs.tigera.io/calico/latest/getting-started/kubernetes/managed-public-cloud/eks
+            - name: Calico operator installation
+              when:
+                - k8s_cluster_info_output['apis']['operator.tigera.io/v1'] is undefined
+              kubernetes.core.k8s:
+                apply: false
+                kubeconfig: "{{ kubeconfig }}"
+                src: https://raw.githubusercontent.com/projectcalico/calico/v{{ calico_version }}/manifests/tigera-operator.yaml
+                state: present
+
+            - name: Calico installation
+              kubernetes.core.k8s:
+                apply: true
+                kubeconfig: "{{ kubeconfig }}"
+                template: "k8s/calico-installation.yaml.j2"
+              vars:
+                calico_ipv4pool_cidr: "172.16.0.0/16"
+
+            - name: Create nodegroups
+              ansible.builtin.command:
+                cmd: eksctl create nodegroup -f {{ flux_dir }}/clusters/{{ cluster_name }}.eks.yaml
+              changed_when: true
+
+            - name: Create Fargate profile
+              ansible.builtin.command:
+                cmd: eksctl create fargateprofile -f {{ flux_dir }}/clusters/{{ cluster_name }}.eks.yaml
+              changed_when: true
+
+            - name: Create IAM service accounts
+              ansible.builtin.command:
+                cmd: >-
+                  eksctl create iamserviceaccount
+                  -f {{ flux_dir }}/clusters/{{ cluster_name }}.eks.yaml
+                  --approve
+              changed_when: true
+
+            - name: Get cfn podidentityrole-kube-system-karpenter
+              amazon.aws.cloudformation_info:
+                profile: "{{ aws_profile }}"
+                stack_name: eksctl-{{ cluster_name }}-podidentityrole-kube-system-karpenter
+              ignore_errors: true
+              register: cfn_podidentityrole
+            # - ansible.builtin.debug: {var: cfn_podidentityrole}
+
+            - name: Create Pod Identity associations
+              when:
+                - cfn_podidentityrole.failed
+              ansible.builtin.command:
+                cmd: eksctl create podidentityassociation -f {{ flux_dir }}/clusters/{{ cluster_name }}.eks.yaml
+              changed_when: true
+
+            - name: Get EKS Cluster Security Group
+              amazon.aws.ec2_security_group_info:
+                profile: "{{ aws_profile }}"
+                filters: "{{ filters_95e36919 | items2dict }}"
+              vars:
+                filters_95e36919:
+                  - key: group-name
+                    value: "eks-cluster-sg-{{ cluster_name }}-*"
+                  - key: "aws:eks:cluster-name"
+                    value: "{{ cluster_name }}"
+                  - key: "tag:kubernetes.io/cluster/{{ cluster_name }}"
+                    value: owned
+              register: eks_cluster_sg_output
+            # - ansible.builtin.debug: {var: eks_cluster_sg_output }
+
+            - name: WORKAROUND add LB firewall rules
+              amazon.aws.ec2_security_group:
+                profile: "{{ aws_profile }}"
+                description: "{{ eks_cluster_sg_output.security_groups.0.description }}"
+                name: "{{ eks_cluster_sg_output.security_groups.0.group_name }}"
+                group_id: "{{ eks_cluster_sg_output.security_groups.0.group_id }}"
+                purge_rules: false
+                rules:
+                  - cidr_ip: "{{ vpc_cidr }}"
+                    ports:
+                      - 30000-32767
+                    proto: tcp
+                    rule_desc: ANSIBLE WORKAROUND ISSUE LB controller
+                  - cidr_ip: "{{ vpc_cidr }}"
+                    ports:
+                      - 30000-32767
+                    proto: udp
+                    rule_desc: ANSIBLE WORKAROUND ISSUE LB controller
+                state: present
+
+            - name: Enable FluxCD
+              ansible.builtin.command:
+                cmd: eksctl enable flux -f {{ flux_dir }}/clusters/{{ cluster_name }}.eks.yaml
+              changed_when: true
+
         - name: Flux directories
           ansible.builtin.file:
             mode: "0755"
@@ -148,15 +279,6 @@
           with_items:
             - infrastructure/{{ cluster_name }}/secrets/.gitignore
 
-        - name: Get kubectl config
-          ansible.builtin.command:
-            cmd: >
-              aws eks update-kubeconfig --name {{ cluster_name }}
-              --profile {{ aws_profile }}
-              --kubeconfig /dev/null --dry-run
-          register: kubeconfig_output
-          changed_when: false
-
         - name: Secret encryption?
           ansible.builtin.stat:
             path: "{{ flux_dir }}/infrastructure/{{ cluster_name }}/.sops.yaml"
@@ -175,7 +297,7 @@
             - name: Age secret
               kubernetes.core.k8s:
                 apply: true
-                kubeconfig: "{{ kubeconfig_output.stdout | from_yaml }}"
+                kubeconfig: "{{ kubeconfig }}"
                 resource_definition:
                   apiVersion: v1
                   kind: Secret
@@ -211,6 +333,8 @@
           register: efs_cfn_output
 
         - name: EFS deployment
+          when:
+            - efs_cfn_output.status == 200
           amazon.aws.cloudformation:
             on_create_failure: DELETE
             profile: "{{ aws_profile }}"
@@ -228,10 +352,8 @@
               SubnetId1: "{{ cluster_sn_output.subnets.0.id }}"
               SubnetId2: "{{ cluster_sn_output.subnets.1.id }}"
               SubnetId3: "{{ cluster_sn_output.subnets.2.id }}"
-          when:
-            - efs_cfn_output.status == 200
           register: efs_output
-            # - ansible.builtin.debug: {var: efs_output}
+        # - ansible.builtin.debug: {var: efs_output}
 
         - name: Set Facts
           ansible.builtin.set_fact:

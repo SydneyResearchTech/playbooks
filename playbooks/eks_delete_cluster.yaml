@@ -1,0 +1,126 @@
+---
+# restek.core.eks_delete_cluster collection playbook
+# ansible-playbook -e 'cluster_name=restek-dev' restek.core.eks_delete_cluster
+# python3 -m pip install kubernetes
+#
+- name: AWS EKS create cluster
+  hosts: localhost
+  become: false
+  connection: local
+  vars:
+    aws_profile: default
+    calico_cidr: "100.64.0.0/10"
+    calico_enabled: true
+    calico_version: "3.29.1"
+    clobber: false
+    # cluster_name: ansible-template
+    karpenter_namespace: kube-system
+    karpenter_version: "1.1.1"
+    kubernetes_version: "1.31"
+    vpc_cidr: "192.168.0.0/16"
+    vpc_id: ""
+
+  handlers:
+    - name: Cleanup kubeconfig
+      ansible.builtin.file:
+        path: "{{ kubeconfig_tmpf.path }}"
+        state: absent
+
+  pre_tasks:
+    - name: Mandatory variables?
+      ansible.builtin.assert:
+        that:
+          - cluster_name is defined and cluster_name is regex("^[a-z0-9][a-z0-9-]+")
+
+  tasks:
+    - name: Get AWS region
+      ansible.builtin.command:
+        cmd: aws configure get region
+      changed_when: false
+      register: region_output
+
+    - name: Get AWS account ID
+      ansible.builtin.command:
+        cmd: aws sts get-caller-identity --profile {{ aws_profile }} --output text --query 'Account'
+      changed_when: false
+      register: aws_account_id_output
+
+    - name: Set facts
+      ansible.builtin.set_fact:
+        account_id: "{{ aws_account_id_output.stdout }}"
+        flux_dir: "{{ (lookup('ansible.builtin.env', 'HOME'), 'flux') | path_join }}"
+        # key_arn: "{{ kms_key_output.key_arn }}"
+        region: "{{ region_output.stdout }}"
+
+    - name: Get kubectl config
+      ansible.builtin.command:
+        cmd: >
+          aws eks update-kubeconfig --name {{ cluster_name }}
+          --profile {{ aws_profile }}
+          --kubeconfig /dev/null --dry-run
+      register: kubeconfig_output
+      changed_when: false
+    - name: Set Facts
+      ansible.builtin.set_fact:
+        kubeconfig: "{{ kubeconfig_output.stdout | from_yaml }}"
+
+    - name: K8s info?
+      kubernetes.core.k8s_info:
+        kind: Namespace
+        kubeconfig: "{{ kubeconfig }}"
+      register: k8s_info
+    - name: Verify empty Kubernetes cluster
+      when:
+        - k8s_info.resources | map(attribute='metadata.name') | list |
+          difference(['ack-system','calico-system','default','flux-system','kube-node-lease','kube-public','kube-system','tigera-operator']) |
+          length > 0
+      ansible.builtin.fail:
+        msg: Kubernetes is running workloads. Remove these services before decomissioning cluster.
+
+    - name: TMP kubeconfig
+      ansible.builtin.tempfile:
+        state: file
+      notify:
+        - Cleanup kubeconfig
+      register: kubeconfig_tmpf
+    - name: Create kubeconfig
+      ansible.builtin.copy:
+        content: "{{ kubeconfig | to_yaml }}"
+        dest: "{{ kubeconfig_tmpf.path }}"
+        mode: "0600"
+
+    - name: Uninstall FluxCD
+      ansible.builtin.command:
+        cmd: >
+          flux uninstall --silent
+          --kubeconfig {{ kubeconfig_tmpf.path }}
+      changed_when: true
+      register: flux_uninstall
+    # - ansible.builtin.debug: {var: flux_uninstall}
+
+    # Delete KMS key
+    # Delete cfn karpenter
+    # Delete / disconnect EFS
+    # Delete eks cluster
+    # Delete .sops from flux
+    - name: Disconnect EFS
+      when: 0 > 1
+      amazon.aws.cloudformation:
+        on_create_failure: ROLLBACK
+        profile: "{{ aws_profile }}"
+        stack_name: eks-{{ cluster_name }}-efs-csi
+        state: present
+        template_parameters:
+          Environment: {use_previous_value: true}
+          TransitionToIA: {use_previous_value: true}
+          PerformanceMode: {use_previous_value: true}
+          VpcId: {use_previous_value: true}
+          SecurityGroupId: "sg-00000000000000000"
+          SubnetId1: "subnet-00000000000000000"
+          SubnetId2: "subnet-00000000000000000"
+          SubnetId3: "subnet-00000000000000000"
+
+    - name: Delete .sops
+      ansible.builtin.file:
+        path: "{{ flux_dir }}/infrastructure/{{ cluster_name }}/.sops.yaml"
+        state: absent

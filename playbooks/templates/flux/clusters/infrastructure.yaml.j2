@@ -11,7 +11,11 @@ spec:
   sourceRef:
     kind: GitRepository
     name: flux-system
+{% if calico_enabled %}
+  path: ./infrastructure/base-aws/controller
+{% else %}
   path: ./infrastructure/base-aws-vpc/controller
+{% endif %}
   prune: true
   postBuild:
     substitute:
@@ -33,7 +37,11 @@ spec:
   sourceRef:
     kind: GitRepository
     name: flux-system
+{% if calico_enabled %}
+  path: ./infrastructure/base-aws/config
+{% else %}
   path: ./infrastructure/base-aws-vpc/config
+{% endif %}
   prune: true
   components: []
   # - components/rds

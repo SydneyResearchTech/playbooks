@@ -1,0 +1,16 @@
+apiVersion: operator.tigera.io/v1
+kind: Installation
+metadata:
+  name: default
+spec:
+  calicoNetwork:
+    bgp: Enabled
+    ipPools:
+    - cidr: {{ calico_ipv4pool_cidr }}
+      encapsulation: IPIPCrossSubnet
+  cni:
+    type: Calico
+  controlPlaneNodeSelector:
+    sydney.edu.au/nodeRole: system
+  controlPlaneReplicas: 3
+  kubernetesProvider: EKS
