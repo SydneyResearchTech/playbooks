@@ -1,0 +1,86 @@
+---
+# playbooks/aws-vrd-lab.yaml
+# ansible-playbook aws-vrd-dev-lab.yaml -e "{subnet_id: subnet-02d6a89d6f0aee6a8, vpc_id: vpc-0a254c860b07b760a}"
+# NB: AWS_PROFILE environment variable required if not default target account
+#
+- name: AWS virtual research desktop lab
+  hosts: localhost
+  connection: local
+  vars:
+    aws_profile: public
+    stack_name: restek-ipv6
+    desired_capacity: 0
+    aws_keyname: dean.taylor@sydney.edu.au
+
+  pre_tasks: []
+
+  tasks:
+    - name: Get cfn vrd-lab.cfn.yml
+      ansible.builtin.uri:
+        return_content: true
+        url: https://raw.githubusercontent.com/SydneyResearchTech/cfn-templates/refs/heads/main/vrd-lab.cfn.yml
+      register: cfn_vrd_lab_template
+    # - ansible.builtin.slurp:
+    #     src: /Users/dean/cfn-templates/vrd-lab.cfn.yml
+    #   register: cfn_vrd_lab_template
+
+    - name: Create stack vrd-lab.cfn.yml
+      amazon.aws.cloudformation:
+        on_create_failure: DELETE
+        profile: "{{ aws_profile }}"
+        stack_name: "{{ stack_name }}-vpc"
+        state: present
+        tags: {}
+        template_body: "{{ cfn_vrd_lab_template.content }}"
+        # template_body: "{{ cfn_vrd_lab_template.content | b64decode }}"
+        template_parameters: {}
+      register: cfn_vrd_lab
+    # - ansible.builtin.debug: {var: cfn_vrd_lab}
+
+    - name: Get AMIs
+      amazon.aws.ec2_ami_info:
+        filters:
+          name: ubuntu-jammy-22.04-amd64-server-cvl-desktop-*
+        owners: ["381427642830"]
+      register: amis
+
+    - name: Get cfn vrd launch template
+      ansible.builtin.uri:
+        return_content: true
+        url: https://raw.githubusercontent.com/SydneyResearchTech/cfn-templates/refs/heads/main/vrd-launch-template.cfn.yml
+      register: vrd_launch_template_cfn_yml
+    # - ansible.builtin.slurp:
+    #     src: /Users/dean/cfn-templates/vrd-launch-template.cfn.yml
+    #   register: vrd_launch_template_cfn_yml
+
+    - name: Create stack vrd-launch-template.cfn.yml
+      amazon.aws.cloudformation:
+        capabilities: ["CAPABILITY_IAM", "CAPABILITY_NAMED_IAM"]
+        on_create_failure: DELETE
+        profile: "{{ aws_profile }}"
+        stack_name: "{{ stack_name }}-vrp-launch-template"
+        state: present
+        tags: {}
+        template_body: "{{ vrd_launch_template_cfn_yml.content }}"
+        # template_body: "{{ vrd_launch_template_cfn_yml.content | b64decode }}"
+        template_parameters:
+          ImageId: "{{ amis.images[-1].image_id }}"
+          KeyName: "{{ aws_keyname }}"
+          SubnetId: "{{ cfn_vrd_lab.stack_outputs.Subnet0 }}"
+          VpcId: "{{ cfn_vrd_lab.stack_outputs.VpcId }}"
+      register: cfn_vrd_launch_template
+    # - ansible.builtin.debug: {var: cfn_vrd_launch_template}
+
+    - name: Create aws autoscaling group
+      amazon.aws.autoscaling_group:
+        # availability_zones: [ap-southeast-2a, ap-southeast-2b, ap-southeast-2c]
+        availability_zones: [ap-southeast-2a]
+        desired_capacity: "{{ desired_capacity }}"
+        launch_template:
+          launch_template_name: "{{ stack_name }}-vrp-launch-template"
+          version: 1
+        max_size: 24
+        min_size: 0
+        name: "{{ stack_name }}-asg"
+        profile: "{{ aws_profile }}"
+        state: present
