@@ -58,7 +58,7 @@
         capabilities: ["CAPABILITY_IAM", "CAPABILITY_NAMED_IAM"]
         on_create_failure: DELETE
         profile: "{{ aws_profile }}"
-        stack_name: "{{ stack_name }}-vrp-launch-template"
+        stack_name: "{{ stack_name }}-vrd-launch-template"
         state: present
         tags: {}
         template_body: "{{ vrd_launch_template_cfn_yml.content }}"
@@ -77,7 +77,7 @@
         availability_zones: [ap-southeast-2a]
         desired_capacity: "{{ desired_capacity }}"
         launch_template:
-          launch_template_name: "{{ stack_name }}-vrp-launch-template"
+          launch_template_name: "{{ stack_name }}-vrd-launch-template"
           version: 1
         max_size: 24
         min_size: 0
