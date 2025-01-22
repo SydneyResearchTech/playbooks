@@ -1,18 +1,22 @@
 ---
 # playbooks/aws-vrd-lab.yaml
-# ansible-playbook aws-vrd-dev-lab.yaml -e "{subnet_id: subnet-02d6a89d6f0aee6a8, vpc_id: vpc-0a254c860b07b760a}"
-# NB: AWS_PROFILE environment variable required if not default target account
-#
+# ansible-playbook restek.core.aws_vrd_lab.yaml -e "{stack_name: ??????, aws_profile: default}"
+# NB: Mandatory extra variables - aws_profile, stack_name
 - name: AWS virtual research desktop lab
   hosts: localhost
   connection: local
   vars:
-    aws_profile: public
-    stack_name: restek-ipv6
+    # aws_profile: default
+    # stack_name: ??????
     desired_capacity: 0
     aws_keyname: dean.taylor@sydney.edu.au
 
-  pre_tasks: []
+  pre_tasks:
+    - name: Mandatory variables?
+      ansible.builtin.assert:
+        that:
+          - aws_profile is defined
+          - stack_name is defined and stack_name is regex("^[a-z0-9][a-z0-9-]+")
 
   tasks:
     - name: Get cfn vrd-lab.cfn.yml
