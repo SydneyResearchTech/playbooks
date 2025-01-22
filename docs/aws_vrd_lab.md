@@ -12,10 +12,15 @@ Scale
 ```bash
 STACK_NAME='??????'
 
+aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names $STACK_NAME-asg \
+--query 'AutoScalingGroups[0].DesiredCapacity' \
+--output text
+
 aws autoscaling set-desired-capacity --auto-scaling-group-name $STACK_NAME-asg --desired-capacity 0
 
 aws ec2 describe-instances --filters "Name=tag:aws:autoscaling:groupName,Values=$STACK_NAME-asg" \
---query 'Reservations[].Instances[].PublicDnsName'
+--query 'Reservations[].Instances[].[PublicDnsName,Ipv6Address,State.Name]' \
+--output text
 ```
 
 Decommission
