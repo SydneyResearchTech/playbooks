@@ -29,7 +29,7 @@ Decommission
 STACK_NAME='??????'
 
 aws autoscaling delete-auto-scaling-group --auto-scaling-group-name $STACK_NAME-asg
-aws cloudformation delete-stack --stack-name $STACK_NAME-vrp-launch-template
+aws cloudformation delete-stack --stack-name $STACK_NAME-vrd-launch-template
 aws cloudformation delete-stack --stack-name $STACK_NAME-vpc
 
 # Checks
