@@ -24,12 +24,12 @@
         - /etc/ansible/.cache
 
     - name: Install kubernetes python module
-      become: false
       tags: [always]
       ansible.builtin.pip:
         name:
           - kubernetes
-        extra_args: -U --user
+        break_system_packages: true
+        extra_args: -U
         state: present
 
   roles:
