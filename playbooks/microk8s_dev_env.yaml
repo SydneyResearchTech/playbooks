@@ -40,7 +40,7 @@
       ansible.builtin.user:
         append: true
         groups: [microk8s]
-        name: "{{ ansible_user_id }}"
+        name: "{{ ansible_user }}"
 
     - name: Does /etc/docker exist?
       ansible.builtin.stat:
