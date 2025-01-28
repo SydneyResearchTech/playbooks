@@ -1,6 +1,6 @@
 ---
 # playbooks/aws-vrd-lab.yaml
-# ansible-playbook restek.core.aws_vrd_lab.yaml -e "{stack_name: ??????, aws_profile: default}"
+# ansible-playbook restek.core.aws_vrd_lab.yaml -e "{stack_name: $STACK_NAME, aws_profile: $AWS_PROFILE}"
 # NB: Mandatory extra variables - aws_profile, stack_name
 - name: AWS virtual research desktop lab
   hosts: localhost
@@ -34,7 +34,8 @@
         profile: "{{ aws_profile }}"
         stack_name: "{{ stack_name }}-vpc"
         state: present
-        tags: {}
+        tags:
+          "sydney.edu.au/resTek/rootStack": "{{ stack_name }}"
         template_body: "{{ cfn_vrd_lab_template.content }}"
         # template_body: "{{ cfn_vrd_lab_template.content | b64decode }}"
         template_parameters: {}
@@ -64,7 +65,8 @@
         profile: "{{ aws_profile }}"
         stack_name: "{{ stack_name }}-vrd-launch-template"
         state: present
-        tags: {}
+        tags:
+          "sydney.edu.au/resTek/rootStack": "{{ stack_name }}"
         template_body: "{{ vrd_launch_template_cfn_yml.content }}"
         # template_body: "{{ vrd_launch_template_cfn_yml.content | b64decode }}"
         template_parameters:
@@ -82,9 +84,11 @@
         desired_capacity: "{{ desired_capacity }}"
         launch_template:
           launch_template_name: "{{ stack_name }}-vrd-launch-template"
-          version: 1
+          version: "{{ cfn_vrd_launch_template.stack_outputs.LatestVersionNumber }}"
         max_size: 24
         min_size: 0
         name: "{{ stack_name }}-asg"
         profile: "{{ aws_profile }}"
         state: present
+        tags:
+          - {"sydney.edu.au/resTek/rootStack": "{{ stack_name }}"}

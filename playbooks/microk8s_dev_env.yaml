@@ -23,10 +23,25 @@
         - /etc/ansible
         - /etc/ansible/.cache
 
+    - name: Install kubernetes python module
+      become: false
+      tags: [always]
+      ansible.builtin.pip:
+        name:
+          - kubernetes
+        extra_args: -U --user
+        state: present
+
   roles:
     - role: restek.core.microk8s
 
   tasks:
+    - name: Add ansible_user to microk8s group
+      ansible.builtin.user:
+        append: true
+        groups: [microk8s]
+        name: "{{ ansible_user_id }}"
+
     - name: Does /etc/docker exist?
       ansible.builtin.stat:
         path: /etc/docker
