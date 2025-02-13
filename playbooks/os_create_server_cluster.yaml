@@ -23,6 +23,7 @@
       when: env == "prod"
       ansible.builtin.get_url:
         dest: "{{ tmpdir.path }}"
+        mode: "0644"
         url: https://raw.githubusercontent.com/SydneyResearchTech/cfn-templates/refs/heads/main/{{ item }}
       with_items:
         - env.hot.yaml
@@ -32,6 +33,7 @@
       when: env == "dev"
       ansible.builtin.copy:
         dest: "{{ tmpdir.path }}"
+        mode: "0644"
         src: "{{ ansible_env.HOME }}/cfn-templates/{{ item }}"
       with_items:
         - env.hot.yaml
@@ -66,6 +68,7 @@
       ansible.builtin.copy:
         content: "{{ app_cred.cloud | to_yaml }}"
         dest: "{{ tmpdir.path }}/clouds.yaml"
+        mode: "0600"
 
   post_tasks: []
 
