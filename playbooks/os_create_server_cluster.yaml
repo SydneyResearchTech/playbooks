@@ -1,0 +1,76 @@
+---
+# playbooks/os_microk8s.yaml
+- name: OpenStack prep. for microk8s deployment
+  hosts: localhost
+  connection: local
+  become: false
+  vars:
+    cloud: nci
+    stack_name: ansible
+    env: prod
+
+  pre_tasks: []
+  roles: []
+
+  tasks:
+    - name: Create tmpdir
+      ansible.builtin.tempfile:
+        state: directory
+      notify: Cleanup tmpdir
+      register: tmpdir
+
+    - name: Get hot files
+      when: env == "prod"
+      ansible.builtin.get_url:
+        dest: "{{ tmpdir.path }}"
+        url: https://raw.githubusercontent.com/SydneyResearchTech/cfn-templates/refs/heads/main/{{ item }}
+      with_items:
+        - env.hot.yaml
+        - server.hot.yaml
+        - server-asg.hot.yaml
+    - name: Get hot files local
+      when: env == "dev"
+      ansible.builtin.copy:
+        dest: "{{ tmpdir.path }}"
+        src: /Users/dean/nci/{{ item }}
+      with_items:
+        - env.hot.yaml
+        - server.hot.yaml
+        - server-asg.hot.yaml
+
+    - name: Deploy stack
+      openstack.cloud.stack:
+        cloud: "{{ cloud }}"
+        environment:
+          - "{{ tmpdir.path }}/env.hot.yaml"
+        name: "{{ stack_name }}"
+        parameters: {}
+        rollback: true
+        state: present
+        template: "{{ tmpdir.path }}/server-asg.hot.yaml"
+
+    - name: Create cluster autoscaling API credentials
+      openstack.cloud.application_credential:
+        access_rules:
+          - method: GET
+            path: "/v2.1/servers"
+            service: compute
+        cloud: "{{ cloud }}"
+        description: Kubernetes cluster autoscaler
+        name: ansible-test
+        roles:
+          - name: reader
+        state: present
+      register: app_cred
+    - name: Create app cred secret
+      ansible.builtin.copy:
+        content: "{{ app_cred.cloud | to_yaml }}"
+        dest: "{{ tmpdir.path }}/clouds.yaml"
+
+  post_tasks: []
+
+  handlers:
+    - name: Cleanup tmpdir
+      ansible.builtin.file:
+        path: "{{ tmpdir.path }}"
+        state: absent
