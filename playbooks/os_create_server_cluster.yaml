@@ -32,7 +32,7 @@
       when: env == "dev"
       ansible.builtin.copy:
         dest: "{{ tmpdir.path }}"
-        src: /Users/dean/nci/{{ item }}
+        src: "{{ ansible_env.HOME }}/cfn-templates/{{ item }}"
       with_items:
         - env.hot.yaml
         - server.hot.yaml
