@@ -1,30 +1,25 @@
 ---
 # restek.core.eks_delete_cluster collection playbook
-# ansible-playbook -e 'cluster_name=restek-dev' restek.core.eks_delete_cluster
+# ansible-playbook -e "@$HOME/flux/clusters/$CLUSTER_NAME.values.yaml" restek.core.eks_delete_cluster
 # python3 -m pip install kubernetes
 #
-- name: AWS EKS create cluster
+- name: AWS EKS delete cluster
   hosts: localhost
   become: false
   connection: local
   vars:
     aws_profile: default
-    calico_cidr: "100.64.0.0/10"
-    calico_enabled: true
-    calico_version: "3.29.1"
-    clobber: false
-    # cluster_name: ansible-template
-    karpenter_namespace: kube-system
-    karpenter_version: "1.1.1"
-    kubernetes_version: "1.31"
-    vpc_cidr: "192.168.0.0/16"
-    vpc_id: ""
-
-  handlers:
-    - name: Cleanup kubeconfig
-      ansible.builtin.file:
-        path: "{{ kubeconfig_tmpf.path }}"
-        state: absent
+    # cluster_name: ""
+    purge: false
+    namespaces:
+      - ack-system
+      - calico-system
+      - default
+      - flux-system
+      - kube-node-lease
+      - kube-public
+      - kube-system
+      - tigera-operator
 
   pre_tasks:
     - name: Mandatory variables?
@@ -49,62 +44,19 @@
       ansible.builtin.set_fact:
         account_id: "{{ aws_account_id_output.stdout }}"
         flux_dir: "{{ (lookup('ansible.builtin.env', 'HOME'), 'flux') | path_join }}"
-        # key_arn: "{{ kms_key_output.key_arn }}"
         region: "{{ region_output.stdout }}"
 
-    - name: Get kubectl config
-      ansible.builtin.command:
-        cmd: >
-          aws eks update-kubeconfig --name {{ cluster_name }}
-          --profile {{ aws_profile }}
-          --kubeconfig /dev/null --dry-run
-      register: kubeconfig_output
-      changed_when: false
-    - name: Set Facts
-      ansible.builtin.set_fact:
-        kubeconfig: "{{ kubeconfig_output.stdout | from_yaml }}"
-
-    - name: K8s info?
-      kubernetes.core.k8s_info:
-        kind: Namespace
-        kubeconfig: "{{ kubeconfig }}"
-      register: k8s_info
-    - name: Verify empty Kubernetes cluster
+    - name: EFS delete
       when:
-        - k8s_info.resources | map(attribute='metadata.name') | list |
-          difference(['ack-system','calico-system','default','flux-system','kube-node-lease','kube-public','kube-system','tigera-operator']) |
-          length > 0
-      ansible.builtin.fail:
-        msg: Kubernetes is running workloads. Remove these services before decomissioning cluster.
+        - purge
+      amazon.aws.cloudformation:
+        profile: "{{ aws_profile }}"
+        stack_name: eks-{{ cluster_name }}-efs-csi
+        state: absent
 
-    - name: TMP kubeconfig
-      ansible.builtin.tempfile:
-        state: file
-      notify:
-        - Cleanup kubeconfig
-      register: kubeconfig_tmpf
-    - name: Create kubeconfig
-      ansible.builtin.copy:
-        content: "{{ kubeconfig | to_yaml }}"
-        dest: "{{ kubeconfig_tmpf.path }}"
-        mode: "0600"
-
-    - name: Uninstall FluxCD
-      ansible.builtin.command:
-        cmd: >
-          flux uninstall --silent
-          --kubeconfig {{ kubeconfig_tmpf.path }}
-      changed_when: true
-      register: flux_uninstall
-    # - ansible.builtin.debug: {var: flux_uninstall}
-
-    # Delete KMS key
-    # Delete cfn karpenter
-    # Delete / disconnect EFS
-    # Delete eks cluster
-    # Delete .sops from flux
-    - name: Disconnect EFS
-      when: 0 > 1
+    - name: EFS disconnect
+      when:
+        - not purge
       amazon.aws.cloudformation:
         on_create_failure: ROLLBACK
         profile: "{{ aws_profile }}"
@@ -120,7 +72,98 @@
           SubnetId2: "subnet-00000000000000000"
           SubnetId3: "subnet-00000000000000000"
 
-    - name: Delete .sops
-      ansible.builtin.file:
-        path: "{{ flux_dir }}/infrastructure/{{ cluster_name }}/.sops.yaml"
+    - name: EKS cluster exists?
+      ansible.builtin.command:
+        cmd: aws eks list-clusters --output json
+      register: list_clusters
+      changed_when: false
+
+    - name: Delete EKS cluster
+      when:
+        - "cluster_name in (list_clusters.stdout | from_json).clusters"
+      block:
+        - name: Get kubectl config
+          ansible.builtin.command:
+            cmd: >
+              aws eks update-kubeconfig --name {{ cluster_name }}
+              --profile {{ aws_profile }}
+              --kubeconfig /dev/null --dry-run
+          register: kubeconfig_output
+          changed_when: false
+
+        - name: Set Facts
+          ansible.builtin.set_fact:
+            kubeconfig: "{{ kubeconfig_output.stdout | from_yaml }}"
+
+        - name: K8s info?
+          kubernetes.core.k8s_info:
+            kind: Namespace
+            kubeconfig: "{{ kubeconfig }}"
+          register: k8s_info
+        # - ansible.builtin.debug: {var: k8s_info}
+        # - ansible.builtin.debug: {var: k8s_info.resources | map(attribute='metadata.name') | list}
+
+        - name: Delete kubernetes resources
+          kubernetes.core.k8s:
+            kind: Namespace
+            kubeconfig: "{{ kubeconfig }}"
+            name: "{{ item }}"
+            state: absent
+          loop: "{{ k8s_info.resources | map(attribute='metadata.name') | list | difference(namespaces) }}"
+
+        # TODO Services using the LB with public IP need to be removed before cluster deleted
+
+        # - name: Verify empty Kubernetes cluster
+        #   when:
+        #     - k8s_info.resources | map(attribute='metadata.name') | list |
+        #       difference(namespaces) |
+        #       length > 0
+        #   ansible.builtin.fail:
+        #     msg: Kubernetes is running workloads. Remove these services before decomissioning the cluster.
+
+        # - name: EKS stacks exist?
+        #   ansible.builtin.command:
+        #     cmd: >-
+        #       aws cloudformation list-stacks
+        #       --query 'StackSummaries[?starts_with(StackName,`eksctl-{{ cluster_name }}-cluster`)==`true`]|[].StackName'
+        #       --profile {{ aws_profile }}
+        #       --output json
+
+        # aws ec2 delete-security-group --group-id sg-#################
+        # aws ec2 delete-vpc-endpoints --vpc-endpoint-ids vpce-#################
+        - name: Delete EKS cluster
+          ansible.builtin.command:
+            cmd: >-
+              eksctl delete cluster
+              --wait
+              --config-file "{{ flux_dir }}/clusters/{{ cluster_name }}.eks.yaml"
+              --profile {{ aws_profile }}
+          register: eks_delete
+          changed_when: false
+        # - ansible.builtin.debug: {var: eks_delete}
+
+    - name: KMS key delete
+      when:
+        - purge
+      amazon.aws.kms_key:
+        alias: eks-secrets-{{ cluster_name }}
+        profile: "{{ aws_profile }}"
         state: absent
+
+    - name: Karpenter stack delete
+      amazon.aws.cloudformation:
+        profile: "{{ aws_profile }}"
+        stack_name: Karpenter-{{ cluster_name }}
+        state: absent
+
+    - name: Flux settings delete
+      when:
+        - 0 > 1
+        - purge
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - "{{ flux_dir }}/apps/overlays/{{ cluster_name }}"
+        - "{{ flux_dir }}/infrastructure/overlays/{{ cluster_name }}"
+        - "{{ flux_dir }}/clusters/{{ cluster_name }}"
