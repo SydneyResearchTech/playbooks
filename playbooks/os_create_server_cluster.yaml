@@ -4,15 +4,27 @@
   hosts: localhost
   connection: local
   become: false
+  force_handlers: true
   vars:
-    cloud: nci
+    cloud: nci-er01
+    cluster_name: nci-dev
+    dev: false
+    flux_dir: "{{ ansible_env.HOME }}/flux"
+    # https://docs.openstack.org/heat/latest/template_guide/environment.html
+    os_env_paths: []
+    os_role: _member_
     stack_name: ansible
-    env: prod
+    context: admin@er01.nci.sydney.edu.au
 
   pre_tasks: []
   roles: []
 
   tasks:
+    - name: Set facts
+      ansible.builtin.set_fact:
+        infrastructure_path: "{{ flux_dir }}/infrastructure/overlays/{{ cluster_name }}"
+        controller_path: "{{ flux_dir }}/infrastructure/overlays/{{ cluster_name }}/controller"
+
     - name: Create tmpdir
       ansible.builtin.tempfile:
         state: directory
@@ -20,7 +32,7 @@
       register: tmpdir
 
     - name: Get hot files
-      when: env == "prod"
+      when: not dev
       ansible.builtin.get_url:
         dest: "{{ tmpdir.path }}"
         mode: "0644"
@@ -30,7 +42,7 @@
         - server.hot.yaml
         - server-asg.hot.yaml
     - name: Get hot files local
-      when: env == "dev"
+      when: dev
       ansible.builtin.copy:
         dest: "{{ tmpdir.path }}"
         mode: "0644"
@@ -45,30 +57,126 @@
         cloud: "{{ cloud }}"
         environment:
           - "{{ tmpdir.path }}/env.hot.yaml"
+          # - "{{ os_env_paths }}"
         name: "{{ stack_name }}"
         parameters: {}
         rollback: true
         state: present
         template: "{{ tmpdir.path }}/server-asg.hot.yaml"
 
-    - name: Create cluster autoscaling API credentials
-      openstack.cloud.application_credential:
-        access_rules:
-          - method: GET
-            path: "/v2.1/servers"
-            service: compute
-        cloud: "{{ cloud }}"
-        description: Kubernetes cluster autoscaler
-        name: ansible-test
-        roles:
-          - name: reader
-        state: present
-      register: app_cred
-    - name: Create app cred secret
-      ansible.builtin.copy:
-        content: "{{ app_cred.cloud | to_yaml }}"
-        dest: "{{ tmpdir.path }}/clouds.yaml"
-        mode: "0600"
+    - name: Create flux directories
+      ansible.builtin.file:
+        mode: "0755"
+        path: "{{ item }}"
+        state: directory
+      with_items:
+        - "{{ infrastructure_path }}"
+        - "{{ controller_path }}"
+
+    - name: Secret encryption?
+      ansible.builtin.stat:
+        path: "{{ infrastructure_path }}/.sops.yaml"
+      register: sops_output
+
+    - name: Secret configuration
+      when:
+        - not sops_output.stat.exists
+      block:
+        - name: Generate age key
+          ansible.builtin.command:
+            cmd: age-keygen
+          register: agekey_output
+          changed_when: false
+
+        - name: Age secret
+          kubernetes.core.k8s:
+            apply: true
+            context: "{{ context }}"
+            resource_definition:
+              apiVersion: v1
+              kind: Secret
+              metadata:
+                name: sops-age
+                namespace: flux-system
+              data:
+                age.agekey: "{{ agekey_output.stdout | b64encode }}"
+            state: present
+
+        - name: Set Facts  # noqa: jinja[spacing]
+          ansible.builtin.set_fact:
+            agekey_public: "{{ agekey_output.stdout | regex_search('public key: (.*)$', '\\1',  multiline=True) | first }}"
+
+        - name: SOPS configuration
+          ansible.builtin.copy:
+            content: |
+              creation_rules:
+              - path_regex: .*.ya?ml
+                encrypted_regex: '^(data|stringData)$'
+                age: >-
+                  {{ agekey_public }}
+            dest: "{{ infrastructure_path }}/.sops.yaml"
+            mode: "0644"
+
+    - name: OS clouds.yaml?
+      ansible.builtin.stat:
+        path: "{{ controller_path }}/openstack-clouds.yaml"
+      register: clouds_yaml_output
+
+    - name: Create external cloud provider application credentials
+      when:
+        - not clouds_yaml_output.stat.exists
+      block:
+        - name: Create external cloud provider application credentials
+          openstack.cloud.application_credential:
+            cloud: "{{ cloud }}"
+            description: Kubernetes external cloud provider
+            name: k8s-{{ cluster_name }}-cpo
+            roles:
+              - name: "{{ os_role }}"
+            state: present
+          register: k8s_cpo_cred
+        # - ansible.builtin.debug: {var: k8s_cpo_cred}
+
+        - name: Set fact clouds.yaml
+          ansible.builtin.set_fact:
+            clouds_yaml: {clouds: {default: "{{ k8s_cpo_cred.cloud }}"}}
+
+        - name: Create cpo clouds.yaml secret
+          ansible.builtin.copy:
+            content: "{{ clouds_yaml | to_yaml }}"
+            dest: "{{ controller_path }}/clouds.yaml"
+            mode: "0600"
+
+        - name: Create cpo clouds.yaml sops sercret
+          ansible.builtin.shell:
+            chdir: "{{ controller_path }}"
+            cmd: >-
+              set -o pipefail;
+              kubectl create secret generic openstack-clouds
+              --dry-run=client --output=yaml --namespace=kube-system
+              --from-literal=clouds.yaml='{{ clouds_yaml | to_yaml }}'
+              | EDITOR="cp -f /dev/stdin" sops openstack-clouds.yaml
+            creates: "{{ controller_path }}/openstack-clouds.yaml"
+            executable: /bin/bash
+
+    # - name: Create cluster autoscaling API credentials
+    #   openstack.cloud.application_credential:
+    #     access_rules:
+    #       - method: GET
+    #         path: "/v2.1/servers"
+    #         service: compute
+    #     cloud: "{{ cloud }}"
+    #     description: Kubernetes cluster autoscaler
+    #     name: ansible-test
+    #     roles:
+    #       - name: reader
+    #     state: present
+    #   register: app_cred
+    # - name: Create app cred secret
+    #   ansible.builtin.copy:
+    #     content: "{{ app_cred.cloud | to_yaml }}"
+    #     dest: "{{ tmpdir.path }}/clouds.yaml"
+    #     mode: "0600"
 
   post_tasks: []
 
