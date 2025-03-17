@@ -10,6 +10,7 @@
   vars:
     aws_profile: default
     # cluster_name: ""
+    flux_dir: "{{ (lookup('ansible.builtin.env', 'HOME'), 'flux') | path_join }}"
     purge: false
     namespaces:
       - ack-system
@@ -30,7 +31,7 @@
   tasks:
     - name: Get AWS region
       ansible.builtin.command:
-        cmd: aws configure get region
+        cmd: aws configure get region --profile {{ aws_profile }}
       changed_when: false
       register: region_output
 
@@ -43,8 +44,8 @@
     - name: Set facts
       ansible.builtin.set_fact:
         account_id: "{{ aws_account_id_output.stdout }}"
-        flux_dir: "{{ (lookup('ansible.builtin.env', 'HOME'), 'flux') | path_join }}"
         region: "{{ region_output.stdout }}"
+        stack_name: eksctl-{{ cluster_name }}-cluster
 
     - name: EFS delete
       when:
@@ -78,6 +79,12 @@
       register: list_clusters
       changed_when: false
 
+    - name: EKS cluster stack?
+      amazon.aws.cloudformation_info:
+        profile: "{{ aws_profile }}"
+        stack_name: "{{ stack_name }}"
+      register: eks_stack
+
     - name: Delete EKS cluster
       when:
         - "cluster_name in (list_clusters.stdout | from_json).clusters"
@@ -94,6 +101,10 @@
         - name: Set Facts
           ansible.builtin.set_fact:
             kubeconfig: "{{ kubeconfig_output.stdout | from_yaml }}"
+            vpc_id: "{{
+              eks_stack[stack_name].stack_description.outputs
+              | (selectattr('output_key','equalto','VPC')).output_value
+              }}"
 
         - name: K8s info?
           kubernetes.core.k8s_info:
@@ -102,6 +113,63 @@
           register: k8s_info
         # - ansible.builtin.debug: {var: k8s_info}
         # - ansible.builtin.debug: {var: k8s_info.resources | map(attribute='metadata.name') | list}
+
+        - name: Guardduty agent?
+          ansible.builtin.command:
+            cmd: >-
+              aws eks list-addons
+              --cluster-name {{ cluster_name }}
+              --profile {{ aws_profile }}
+              --output json
+          register: addons_list
+          changed_when: false
+
+        - name: Delete addon aws-guardduty-agent
+          when:
+            - "'aws-guardduty-agent' in (addons_list.stdout | from_json).addons"
+          ansible.builtin.command:
+            cmd: >-
+              aws eks delete-addon
+              --cluster-name {{ cluster_name }}
+              --addon-name aws-guardduty-agent
+              --profile {{ aws_profile }}
+              --output json
+          register: guardduty_agent
+          changed_when: "(guardduty_agent.stdout | from_json).addon.status == 'DELETING')"
+
+        # GuardDuty
+        # aws ec2 delete-vpc-endpoints --vpc-endpoint-ids vpce-#################
+        # aws ec2 describe-security-groups \
+        # --filters Name=tag:GuardDutyManaged,Values=true Name=vpc-id,Values=vpc-################# \
+        # --query 'SecurityGroups[].GroupId' --output text \
+        # |xargs -n1 aws ec2 delete-security-group --group-id
+        - name: GuardDuty VPC endpoint?
+          amazon.aws.ec2_vpc_endpoint_info:
+            filters:
+              "tag:GuardDutyManaged": true
+              vpc-id: "{{ vpc_id }}"
+            profile: "{{ aws_profile }}"
+          register: guardduty_vpc_endpoint
+
+        - name: GuardDuty VPC endpoint
+          amazon.aws.ec2_vpc_endpoint:
+            profile: "{{ aws_profile }}"
+            state: absent
+            vpc_endpoint_id: "{{ guardduty_vpc_endpoint.vpc_endpoints | map(attribute='vpc_endpoint_id') | list }}"
+
+        - name: GuardDuty Security Group
+          amazon.aws.ec2_security_group_info:
+            filters:
+              "tag:GuardDutyManaged": true
+              vpc-id: "{{ vpc_id }}"
+            profile: "{{ aws_profile }}"
+          register: guardduty_security_group
+
+        - name: GuardDuty Security Group
+          amazon.aws.ec2_security_group:
+            group_id: "{{ guardduty_security_group.security_groups | map(attribute='group_id') | list }}"
+            profile: "{{ aws_profile }}"
+            state: absent
 
         - name: Delete kubernetes resources
           kubernetes.core.k8s:
