@@ -1,5 +1,6 @@
 ---
-# playbooks/os_microk8s.yaml
+# playbooks/os_create_server_cluster.yaml
+# ansible-playbook restek.core.os_create_server_cluster -e '{os_cloud: nci-er01, stack_name: k8sdev, vip: 1}'
 - name: OpenStack prep. for deployment
   hosts: localhost
   become: false
@@ -7,16 +8,15 @@
   force_handlers: true
   gather_facts: false
   vars:
-    cloud: nci-er01
-    cluster_name: nci-dev
-    dev: true
-    flux_dir: "{{ lookup('ansible.builtin.env', 'HOME') }}/flux"
-    flux_enabled: false
-    # https://docs.openstack.org/heat/latest/template_guide/environment.html
-    os_env_paths: []
-    os_role: _member_
+    os_cloud: nci-er01
     #stack_name: MUST be provided as parameter
-    context: admin@er01.nci.sydney.edu.au
+    dev: false
+    vip: 0
+    hot_items:
+      - env.hot.yaml
+      - server.hot.yaml
+      - server-asg.hot.yaml
+      - lb-vip.hot.yaml
 
   handlers:
     - name: Cleanup tmpdir
@@ -29,14 +29,11 @@
       ansible.builtin.assert:
         that:
           - stack_name is defined
-        msg: "'stack_name' must be defined"
+          - os_cloud is defined
+          - vip >= 0
+        msg: "'os_cloud', 'stack_name' must be defined"
 
   tasks:
-    - name: Set facts
-      ansible.builtin.set_fact:
-        infrastructure_path: "{{ flux_dir }}/infrastructure/overlays/{{ cluster_name }}"
-        controller_path: "{{ flux_dir }}/infrastructure/overlays/{{ cluster_name }}/controller"
-
     - name: Create tmpdir
       ansible.builtin.tempfile:
         state: directory
@@ -49,20 +46,14 @@
         dest: "{{ tmpdir.path }}"
         mode: "0644"
         url: https://raw.githubusercontent.com/SydneyResearchTech/cfn-templates/refs/heads/main/{{ item }}
-      with_items:
-        - env.hot.yaml
-        - server.hot.yaml
-        - server-asg.hot.yaml
+      with_items: "{{ hot_items }}"
     - name: Get hot files local
       when: dev
       ansible.builtin.copy:
         dest: "{{ tmpdir.path }}"
         mode: "0644"
         src: "{{ lookup('ansible.builtin.env', 'HOME') }}/cfn-templates/{{ item }}"
-      with_items:
-        - env.hot.yaml
-        - server.hot.yaml
-        - server-asg.hot.yaml
+      with_items: "{{ hot_items }}"
 
     - name: OpenStack stack environment
       ansible.builtin.copy:
@@ -75,7 +66,7 @@
 
     - name: Deploy stack
       openstack.cloud.stack:
-        cloud: "{{ cloud }}"
+        cloud: "{{ os_cloud }}"
         environment:
           - "{{ tmpdir.path }}/env.hot.yaml"
           - "{{ tmpdir.path }}/ansible.env.yaml"
@@ -88,10 +79,28 @@
         template: "{{ tmpdir.path }}/server-asg.hot.yaml"
       register: stack_reg
     # - ansible.builtin.debug: {var: stack_reg}
+    # - ansible.builtin.debug: {msg: "{{ (stack_reg.stack.outputs | community.general.json_query('[?output_key==`networkId`]')).0.output_value }}"}
+
+    - name: VIP stack
+      openstack.cloud.stack:
+        cloud: "{{ os_cloud }}"
+        name: "{{ stack_name }}-vip-{{ idx }}"
+        parameters:
+          network: "{{ (stack_reg.stack.outputs | community.general.json_query('[?output_key==`networkId`]')).0.output_value }}"
+        rollback: true
+        state: present
+        template: "{{ tmpdir.path }}/lb-vip.hot.yaml"
+      loop: "{{ range(0, vip) }}"
+      loop_control:
+        index_var: idx
+      register: vip_reg
+    #- ansible.builtin.debug: {var: vip_reg}
+    #- ansible.builtin.debug: {msg: "{{ vip_reg.results | community.general.json_query('[*].stack.outputs[?output_key==`fixed_ip_address`].output_value') }}"}
 
     - name: OpenStack server list
       openstack.cloud.server_info:
-        cloud: "{{ cloud }}"
+        cloud: "{{ os_cloud }}"
+        detailed: true
         filters:
           metadata:
             "metering.server_group": "{{ stack_reg.stack.id }}"
@@ -106,16 +115,55 @@
           - stack_{{ stack_reg.stack.name }}
         name: "{{ item.name }}"
         ansible_host: "{{ item.access_ipv4 }}"
+        os_allowed_address_pairs: "{{ vip_reg.results | community.general.json_query('[*].stack.outputs[?output_key==`fixed_ip_address`].output_value') | flatten }}"
+        os_network_id: "{{ (stack_reg.stack.outputs | community.general.json_query('[?output_key==`networkId`]')).0.output_value }}"
       with_items: "{{ servers_reg.servers }}"
 
 
 - name: Configure server hosts
   hosts: "stack_{{ stack_name }},&microk8s"
   become: true
-  handlers: []
-  pre_tasks: []
+  vars:
+    os_cloud: nci-er01
+
+  pre_tasks:
+    - name: OpenStack config.
+      become: false
+      block:
+        - name: OpenStack server port
+          openstack.cloud.port_info:
+            cloud: "{{ os_cloud }}"
+            filters:
+              mac_address: "{{ ansible_default_ipv4.macaddress }}"
+          delegate_to: localhost
+          register: port_reg
+        # - ansible.builtin.debug: {var: port_reg}
+        # - ansible.builtin.debug: {msg: "{{ os_allowed_address_pairs | community.general.json_query('[].{\"ip_address\": @}') }}"}
+
+        # state is present but all of the following are missing: network
+        - name: OpenStack port allowed address pairs
+          when: 0 > 1
+          openstack.cloud.port:
+            cloud: "{{ os_cloud }}"
+            allowed_address_pairs: "{{ os_allowed_address_pairs | community.general.json_query('[].{\"ip_address\": @}') }}"
+            name: "{{ port_reg.ports.0.name }}"
+            state: present
+          delegate_to: localhost
+
+        - name: OpenStack port allowed address pairs WORKAROUND
+          ansible.builtin.command:
+            cmd: >-
+              openstack port set
+              --no-allowed-address
+              {% for ip_address in os_allowed_address_pairs %}
+              --allowed-address ip-address={{ ip_address }}
+              {% endfor %}
+              {{ port_reg.ports.0.name }}
+          delegate_to: localhost
+          register: port_set_reg
+        # - ansible.builtin.debug: {var: port_set_reg}
+
   roles:
     - role: microk8s
       when: inventory_hostname in groups["microk8s"]
   tasks: []
-  post_tasks: []
