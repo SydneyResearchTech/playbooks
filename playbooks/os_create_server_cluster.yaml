@@ -1,23 +1,35 @@
 ---
 # playbooks/os_microk8s.yaml
-- name: OpenStack prep. for microk8s deployment
+- name: OpenStack prep. for deployment
   hosts: localhost
-  connection: local
   become: false
+  connection: local
   force_handlers: true
+  gather_facts: false
   vars:
     cloud: nci-er01
     cluster_name: nci-dev
-    dev: false
-    flux_dir: "{{ ansible_env.HOME }}/flux"
+    dev: true
+    flux_dir: "{{ lookup('ansible.builtin.env', 'HOME') }}/flux"
+    flux_enabled: false
     # https://docs.openstack.org/heat/latest/template_guide/environment.html
     os_env_paths: []
     os_role: _member_
-    stack_name: ansible
+    #stack_name: MUST be provided as parameter
     context: admin@er01.nci.sydney.edu.au
 
-  pre_tasks: []
-  roles: []
+  handlers:
+    - name: Cleanup tmpdir
+      ansible.builtin.file:
+        path: "{{ tmpdir.path }}"
+        state: absent
+
+  pre_tasks:
+    - name: Assert
+      ansible.builtin.assert:
+        that:
+          - stack_name is defined
+        msg: "'stack_name' must be defined"
 
   tasks:
     - name: Set facts
@@ -46,142 +58,64 @@
       ansible.builtin.copy:
         dest: "{{ tmpdir.path }}"
         mode: "0644"
-        src: "{{ ansible_env.HOME }}/cfn-templates/{{ item }}"
+        src: "{{ lookup('ansible.builtin.env', 'HOME') }}/cfn-templates/{{ item }}"
       with_items:
         - env.hot.yaml
         - server.hot.yaml
         - server-asg.hot.yaml
+
+    - name: OpenStack stack environment
+      ansible.builtin.copy:
+        content: |
+          parameter_defaults:
+            volume_size: 20
+            volume_type: Nirin2_Transaction
+        dest: "{{ tmpdir.path }}/ansible.env.yaml"
+        mode: "0644"
 
     - name: Deploy stack
       openstack.cloud.stack:
         cloud: "{{ cloud }}"
         environment:
           - "{{ tmpdir.path }}/env.hot.yaml"
-          # - "{{ os_env_paths }}"
+          - "{{ tmpdir.path }}/ansible.env.yaml"
         name: "{{ stack_name }}"
-        parameters: {}
+        parameters:
+          desired_capacity: 1
+          router: er01
         rollback: true
         state: present
         template: "{{ tmpdir.path }}/server-asg.hot.yaml"
+      register: stack_reg
+    # - ansible.builtin.debug: {var: stack_reg}
 
-    - name: Create flux directories
-      ansible.builtin.file:
-        mode: "0755"
-        path: "{{ item }}"
-        state: directory
-      with_items:
-        - "{{ infrastructure_path }}"
-        - "{{ controller_path }}"
+    - name: OpenStack server list
+      openstack.cloud.server_info:
+        cloud: "{{ cloud }}"
+        filters:
+          metadata:
+            "metering.server_group": "{{ stack_reg.stack.id }}"
+      register: servers_reg
+    # - ansible.builtin.debug: {var: servers_reg}
 
-    - name: Secret encryption?
-      ansible.builtin.stat:
-        path: "{{ infrastructure_path }}/.sops.yaml"
-      register: sops_output
+    - name: Add hosts to inventory
+      ansible.builtin.add_host:
+        groups:
+          - all
+          - microk8s
+          - stack_{{ stack_reg.stack.name }}
+        name: "{{ item.name }}"
+        ansible_host: "{{ item.access_ipv4 }}"
+      with_items: "{{ servers_reg.servers }}"
 
-    - name: Secret configuration
-      when:
-        - not sops_output.stat.exists
-      block:
-        - name: Generate age key
-          ansible.builtin.command:
-            cmd: age-keygen
-          register: agekey_output
-          changed_when: false
 
-        - name: Age secret
-          kubernetes.core.k8s:
-            apply: true
-            context: "{{ context }}"
-            resource_definition:
-              apiVersion: v1
-              kind: Secret
-              metadata:
-                name: sops-age
-                namespace: flux-system
-              data:
-                age.agekey: "{{ agekey_output.stdout | b64encode }}"
-            state: present
-
-        - name: Set Facts  # noqa: jinja[spacing]
-          ansible.builtin.set_fact:
-            agekey_public: "{{ agekey_output.stdout | regex_search('public key: (.*)$', '\\1',  multiline=True) | first }}"
-
-        - name: SOPS configuration
-          ansible.builtin.copy:
-            content: |
-              creation_rules:
-              - path_regex: .*.ya?ml
-                encrypted_regex: '^(data|stringData)$'
-                age: >-
-                  {{ agekey_public }}
-            dest: "{{ infrastructure_path }}/.sops.yaml"
-            mode: "0644"
-
-    - name: OS clouds.yaml?
-      ansible.builtin.stat:
-        path: "{{ controller_path }}/openstack-clouds.yaml"
-      register: clouds_yaml_output
-
-    - name: Create external cloud provider application credentials
-      when:
-        - not clouds_yaml_output.stat.exists
-      block:
-        - name: Create external cloud provider application credentials
-          openstack.cloud.application_credential:
-            cloud: "{{ cloud }}"
-            description: Kubernetes external cloud provider
-            name: k8s-{{ cluster_name }}-cpo
-            roles:
-              - name: "{{ os_role }}"
-            state: present
-          register: k8s_cpo_cred
-        # - ansible.builtin.debug: {var: k8s_cpo_cred}
-
-        - name: Set fact clouds.yaml
-          ansible.builtin.set_fact:
-            clouds_yaml: {clouds: {default: "{{ k8s_cpo_cred.cloud }}"}}
-
-        - name: Create cpo clouds.yaml secret
-          ansible.builtin.copy:
-            content: "{{ clouds_yaml | to_yaml }}"
-            dest: "{{ controller_path }}/clouds.yaml"
-            mode: "0600"
-
-        - name: Create cpo clouds.yaml sops sercret
-          ansible.builtin.shell:
-            chdir: "{{ controller_path }}"
-            cmd: >-
-              set -o pipefail;
-              kubectl create secret generic openstack-clouds
-              --dry-run=client --output=yaml --namespace=kube-system
-              --from-literal=clouds.yaml='{{ clouds_yaml | to_yaml }}'
-              | EDITOR="cp -f /dev/stdin" sops openstack-clouds.yaml
-            creates: "{{ controller_path }}/openstack-clouds.yaml"
-            executable: /bin/bash
-
-    # - name: Create cluster autoscaling API credentials
-    #   openstack.cloud.application_credential:
-    #     access_rules:
-    #       - method: GET
-    #         path: "/v2.1/servers"
-    #         service: compute
-    #     cloud: "{{ cloud }}"
-    #     description: Kubernetes cluster autoscaler
-    #     name: ansible-test
-    #     roles:
-    #       - name: reader
-    #     state: present
-    #   register: app_cred
-    # - name: Create app cred secret
-    #   ansible.builtin.copy:
-    #     content: "{{ app_cred.cloud | to_yaml }}"
-    #     dest: "{{ tmpdir.path }}/clouds.yaml"
-    #     mode: "0600"
-
+- name: Configure server hosts
+  hosts: "stack_{{ stack_name }},&microk8s"
+  become: true
+  handlers: []
+  pre_tasks: []
+  roles:
+    - role: microk8s
+      when: inventory_hostname in groups["microk8s"]
+  tasks: []
   post_tasks: []
-
-  handlers:
-    - name: Cleanup tmpdir
-      ansible.builtin.file:
-        path: "{{ tmpdir.path }}"
-        state: absent
