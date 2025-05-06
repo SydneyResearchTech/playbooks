@@ -1,15 +1,14 @@
 ---
 # defaults file for microk8s
 ## \param microk8s_enable []string addons to enable `microk8s status` lists available options.
-microk8s_enable:
-  - cert-manager
-  - dns
-  - ha-cluster
-  - helm3
-  - ingress
-  - observability
-  - rbac
-  - registry
+microk8s_enable: []
+
+microk8s_cni_ipv4_enabled: true
+microk8s_cni_ipv4_cluster_cidr: 100.64.0.0/16
+microk8s_cni_ipv4_service_cidr: 100.127.0.0/24
+microk8s_cni_ipv6_enabled: false
+microk8s_cni_ipv6_cluster_cidr: fdf4:8ab3:60fb::/64
+microk8s_cni_ipv6_service_cidr: fdf4:8ab3:60fb:fffe::/108
 
 microk8s_dexidp_enabled: false
 microk8s_dexidp_port: 31000
@@ -50,5 +49,6 @@ microk8s_local_storage: []
 
 ## \param microk8s_metallb_range string Load balancer IP address ranges
 microk8s_metallb_range: "{{ ansible_default_ipv4.network + '/' + ansible_default_ipv4.prefix }}"
+microk8s_metallb_address_pool: ["172.32.0.0/24"]
 # https://prometheus.io/docs/guides/node-exporter/
 microk8s_node_exporter_metrics_enabled: false

@@ -140,7 +140,7 @@
         # - ansible.builtin.debug: {var: port_reg}
         # - ansible.builtin.debug: {msg: "{{ os_allowed_address_pairs | community.general.json_query('[].{\"ip_address\": @}') }}"}
 
-        # state is present but all of the following are missing: network
+        # ISSUE: state is present but all of the following are missing: network
         - name: OpenStack port allowed address pairs
           when: 0 > 1
           openstack.cloud.port:
@@ -153,7 +153,7 @@
         - name: OpenStack port allowed address pairs WORKAROUND
           ansible.builtin.command:
             cmd: >-
-              openstack port set
+              openstack port set --os-cloud={{ os_cloud }}
               --no-allowed-address
               {% for ip_address in os_allowed_address_pairs %}
               --allowed-address ip-address={{ ip_address }}
@@ -162,6 +162,12 @@
           delegate_to: localhost
           register: port_set_reg
         # - ansible.builtin.debug: {var: port_set_reg}
+
+        - name: Set fact microk8s_metallb_range
+          when: os_allowed_address_pairs
+          ansible.builtin.set_fact:
+            microk8s_metallb_address_pool: "{{ os_allowed_address_pairs | product(['32']) | map('join','/') | list }}"
+        # - ansible.builtin.debug: {var: microk8s_metallb_address_pool}
 
   roles:
     - role: microk8s

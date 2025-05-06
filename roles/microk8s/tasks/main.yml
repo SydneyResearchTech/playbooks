@@ -1,7 +1,7 @@
 ---
 # tasks file for microk8s
 #
-- name: Apt update
+- name: Update package cache
   ansible.builtin.apt:
     cache_valid_time: 86400
     update_cache: true
@@ -11,7 +11,19 @@
 - name: Install pre-req. packages
   ansible.builtin.package:
     name:
+      - python3-pip
+    state: present
+
+- name: Remove conflict packages
+  ansible.builtin.package:
+    name:
       - python3-kubernetes
+    state: absent
+
+- name: Install kubernetes module
+  ansible.builtin.pip:
+    break_system_packages: true
+    name: kubernetes
     state: present
 
 - name: Wireguard pre-req. for Calico
@@ -30,6 +42,18 @@
         - snapd/install-{{ ansible_distribution }}-{{ ansible_distribution_version }}.yml
         - snapd/install-{{ ansible_distribution }}.yml
         - snapd/install.yml
+
+- name: Create /var/snap/microk8s/common
+  ansible.builtin.file:
+    path: /var/snap/microk8s/common
+    state: directory
+
+- name: Create launch configuration file
+  ansible.builtin.template:
+    dest: /var/snap/microk8s/common/.microk8s.yaml
+    lstrip_blocks: true
+    mode: "0644"
+    src: microk8s.yaml.j2
 
 - name: Install microk8s
   ansible.builtin.command:
@@ -62,6 +86,7 @@
   ansible.builtin.set_fact:
     microk8s_status: "{{ microk8s_status_output.stdout | from_yaml }}"
     kubeconfig: "{{ microk8s_config_ret.stdout | from_json }}"
+    metallb: "{{ microk8s_enable | select('search', '^metallb') | first }}"
 
 - name: Update server certificate
   ansible.builtin.blockinfile:
@@ -117,23 +142,23 @@
   run_once: true
   # delegate_to: cluster_lead
   block:
-    - name: Microk8s enable addons
+    - name: Metallb config.
+      when: metallb
+      ansible.builtin.include_tasks: metallb/configure.yml
+
+    - name: Enable addons
       ansible.builtin.shell:
         cmd: |
           set -eo pipefail
           ADDON="{{ item }}"
           if [[ $ADDON == gpu ]]; then
             microk8s enable gpu --set toolkit.enabled=false
-          elif [[ $ADDON == metallb* ]]; then
-            [[ $ADDON == metallb:* ]] \
-              && microk8s enable ${ADDON} \
-              || microk8s enable $(metallb-range.py "{{ microk8s_metallb_range }}")
           else
             microk8s enable ${ADDON}
           fi
         executable: /bin/bash
       with_items:
-        - "{{ microk8s_enable }}"
+        - "{{ microk8s_enable | reject('search','^metallb') }}"
         - "{{
             ((microk8s_hostpaths | length > 0) and (microk8s_enable | select('search', 'hostpath-storage') | length == 0)) |
             ternary(['hostpath-storage'], [])
@@ -146,11 +171,27 @@
       when:
         - "'cert-manager' in microk8s_enable"
 
-    - name: Ingress service
-      ansible.builtin.import_tasks: ingress-lb-patch.yml
+    - name: Ingress nginx service via metallb
       when:
-        - "'metallb' in microk8s_enable"
         - "'ingress' in microk8s_enable"
+        - metallb
+      kubernetes.core.k8s:
+        apply: true
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: ingress
+            namespace: ingress
+          spec:
+            selector:
+              name: nginx-ingress-microk8s
+            type: LoadBalancer
+            ports:
+              - {name: http, protocol: TCP, port: 80, targetPort: 80}
+              - {name: https, protocol: TCP, port: 443, targetPort: 443}
+        kubeconfig: "{{ kubeconfig }}"
+        state: present
 
     - name: Storage class microk8s-hostpath
       ansible.builtin.import_tasks: hostpath_provisioner.yml

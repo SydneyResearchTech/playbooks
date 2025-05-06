@@ -14,6 +14,10 @@
     name: systemd-resolved.service
     state: restarted
 
+- name: Restart metallb
+  ansible.builtin.command:
+    cmd: microk8s kubectl -n metallb-system rollout restart deployment controller
+
 - name: Restart microk8s
   ansible.builtin.command:
     cmd: snap restart microk8s

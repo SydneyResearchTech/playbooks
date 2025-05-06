@@ -1,0 +1,25 @@
+- name: Set metallb_address_pool
+  ansible.builtin.set_fact:
+    metallb_address_pool: "{{
+      ((metallb | split(':'))[1] | split(','))
+      if (metallb | split(':') | length > 1)
+      else microk8s_metallb_address_pool
+      }}"
+# - ansible.builtin.debug: {var: metallb_address_pool}
+
+- name: Microk8s enable metallb
+  ansible.builtin.command:
+    cmd: microk8s enable metallb:{{ metallb_address_pool | join(',') }}
+  register: metallb_reg
+  changed_when: "'is enabled' in metallb_reg.stdout"
+
+- name: Metallb apply default addresspool
+  when:
+    - metallb_reg is not changed
+  kubernetes.core.k8s:
+    apply: true
+    kubeconfig: "{{ kubeconfig }}"
+    state: present
+    template: metallb_default-addresspool.yaml.j2
+  notify:
+    - Restart metallb
