@@ -1,0 +1,7 @@
+---
+# defaults file for docker
+docker_insecure_registries: []
+# - localhost:32000
+docker_users: []
+# - ubuntu
+# - username

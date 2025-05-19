@@ -1,0 +1,8 @@
+# roles/apptainer/tasks/install_Debian.yml
+- name: Install
+  ansible.builtin.apt:
+    allow_downgrade: true
+    deb: "https://github.com/apptainer/apptainer/releases/download\
+      /v{{ apptainer_version }}\
+      /{{ apptainer_package }}_{{ apptainer_version }}_amd64.deb"
+    state: present

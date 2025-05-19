@@ -1,8 +1,14 @@
 ---
 # handlers file for microk8s
+- name: Restart calico node
+  ansible.builtin.command:
+    cmd: microk8s kubectl -n kube-system rollout restart daemonset/calico-node
+  changed_when: false
+
 - name: Create tmpfiles
-  ansible.builtin.command: # noqa: no-changed-when
+  ansible.builtin.command:
     cmd: systemd-tmpfiles --create
+  changed_when: false
 
 - name: Refresh server certificate
   ansible.builtin.command:
@@ -17,6 +23,7 @@
 - name: Restart metallb
   ansible.builtin.command:
     cmd: microk8s kubectl -n metallb-system rollout restart deployment controller
+  changed_when: false
 
 - name: Restart microk8s
   ansible.builtin.command:

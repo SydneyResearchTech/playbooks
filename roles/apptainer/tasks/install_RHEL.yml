@@ -1,0 +1,11 @@
+- name: Install pre-requisite
+  ansible.builtin.package:
+    name:
+      - epel-release
+    state: present
+
+- name: Install
+  ansible.builtin.package:
+    name:
+      - "{{ apptainer_package }}"
+    state: present

@@ -4,6 +4,7 @@
   vars:
     dns_domain: fake.sydney.edu.au
     helm: "/snap/microk8s/current/bin/helm"
+    named_enabled: true
 
   pre_tasks:
     - name: Install Amazon EFS utils
@@ -12,6 +13,12 @@
       block:
         - name: Include amazon-efs-utils
           ansible.builtin.include_tasks: tasks/amazon-efs-utils.yml
+
+    - name: Install packages
+      ansible.builtin.package:
+        name:
+          - python3-yaml
+        state: present
 
     - name: Create directories
       tags: [always]
@@ -22,6 +29,7 @@
       with_items:
         - /etc/ansible
         - /etc/ansible/.cache
+        - /etc/systemd/resolved.conf.d
 
     - name: Install kubernetes python module
       tags: [always]
@@ -34,77 +42,26 @@
 
   roles:
     - role: restek.core.microk8s
+      microk8s_users: ["{{ ansible_user }}"]
+      microk8s_enable: [dns, hostpath-storage, metallb]
 
   tasks:
-    - name: Add ansible_user to microk8s group
-      ansible.builtin.user:
-        append: true
-        groups: [microk8s]
-        name: "{{ ansible_user }}"
-
-    - name: Does /etc/docker exist?
-      ansible.builtin.stat:
-        path: /etc/docker
-      register: is_docker
-
     - name: Slurp microk8s config
       ansible.builtin.command:
         cmd: microk8s config
-      register: microk8s_config_ret
+      register: microk8s_config_reg
       changed_when: false
 
     - name: Set facts
       ansible.builtin.set_fact:
-        kubeconfig: "{{ microk8s_config_ret.stdout | from_yaml }}"
-
-    - name: Configure Docker daemon
-      when:
-        - is_docker.stat.isdir is defined and is_docker.stat.isdir
-      block:
-        - name: Create /etc/docker/daemon.json
-          ansible.builtin.copy:
-            content: "{}"
-            dest: /etc/docker/daemon.json
-            force: false
-            mode: "0644"
-
-        - name: Read /etc/docker/daemon.json
-          ansible.builtin.slurp:
-            src: /etc/docker/daemon.json
-          register: daemon_json
-
-        - name: Patch /etc/docker/daemon.json
-          # https://github.com/particledecay/ansible-jsonpatch
-          json_patch:
-            src: /etc/docker/daemon.json
-            operations:
-              - op: add
-                path: "/insecure-registries"
-                value: []
-            pretty: true
-            create: true
-            create_type: object
-          when:
-            - (daemon_json['content']|b64decode|from_json)['insecure-registries'] is not defined
-
-        - name: Patch /etc/docker/daemon.json
-          json_patch:
-            src: /etc/docker/daemon.json
-            operations:
-              - op: add
-                path: "/insecure-registries/-"
-                value: "localhost:32000"
-            pretty: true
-            create: true
-            create_type: object
-          when:
-            - (daemon_json['content']|b64decode|from_json)['insecure-registries'] is not defined
-              or (daemon_json['content']|b64decode|from_json)['insecure-registries'] is not contains('localhost:32000')
+        kubeconfig: "{{ microk8s_config_reg.stdout | from_yaml }}"
+        tsig_name: "tsigkey-{{ dns_domain }}"
+        tsig_name_meta: "tsigkey-{{ dns_domain | replace('.', '-') }}"
 
     - name: Configure DNS resolve
       tags: [named]
       when:
-        - named_enabled | default(false) | bool
+        - named_enabled
       block:
         - name: Add ResTek helm repo
           kubernetes.core.helm_repository:
@@ -113,7 +70,7 @@
             repo_url: https://sydneyresearchtech.github.io/charts/
             state: present
 
-        - name: DNS forwarders?
+        - name: Get host configured DNS forwarders
           ansible.builtin.shell:
             cmd: |
               set -o pipefail
@@ -122,17 +79,17 @@
                   -e 's/.*:\s\+\([0-9a-f.: ]*\).*$/\1/' \
                   -e 's/ fe80::[0-9a-f.:]*//'
             executable: /bin/bash
-          register: dns_forwarders_output
+          register: dns_forwarders_reg
           changed_when: false
 
-        - name: DNS search?
+        - name: Get domain search
           ansible.builtin.shell:
             cmd: |
               set -o pipefail
               resolvectl -i{{ ansible_default_ipv4.interface }} domain | \
                 sed 's/.*:\s\+\(.*\)$/\1/'
             executable: /bin/bash
-          register: dns_search_output
+          register: dns_search_reg
           changed_when: false
 
         - name: Generate tsig key
@@ -140,35 +97,37 @@
             cmd: |
               set -o pipefail
               umask 0077
-              microk8s kubectl run -it --rm {{ 60 | random | to_uuid }} --image=ubuntu/bind9 --restart=Never \
-              -- tsig-keygen tsigkey-fake.sydney.edu.au | \
+              microk8s kubectl run -it --rm {{ 60 | random | to_uuid }} --image=ubuntu/bind9 --restart=Never -- \
+              tsig-keygen {{ tsig_name }} | \
               sed -n '/^key/,/^};/p' \
-              > /etc/ansible/.cache/tsigkey-fake.sydney.edu.au
+              > /etc/ansible/.cache/{{ tsig_name }}
             executable: /bin/bash
-            creates: /etc/ansible/.cache/tsigkey-fake.sydney.edu.au
+            creates: /etc/ansible/.cache/{{ tsig_name }}
           notify:
             - Update bind server
-            - Update external dns
 
         - name: Slurp tsig key
           ansible.builtin.slurp:
-            src: /etc/ansible/.cache/tsigkey-fake.sydney.edu.au
-          register: tsig_ret
+            src: /etc/ansible/.cache/{{ tsig_name }}
+          register: tsig_reg
 
         - name: Get all helm charts deployed
           ansible.builtin.command:
             cmd: microk8s helm list -A -o json
           changed_when: false
-          register: helm_list_ret
+          register: helm_list_reg
 
         - name: Set facts # noqa: jinja[spacing]
           ansible.builtin.set_fact:
-            bind_deployed: "{{ helm_list_ret.stdout | from_json | selectattr('name','search','bind') | list | count > 0 }}"
-            dns_forwarders: "{{ dns_forwarders_output.stdout | split | ansible.utils.ipv4 | list }}"
-            dns_search: "{{ dns_search_output.stdout | split }}"
-            rfc2136_tsig_secret: '{{ tsig_ret.content | b64decode | regex_search("secret\s+.(.*).;$","\1",multiline=True) | first }}'
-            rfc2136_tsig_secret_alg: '{{ tsig_ret.content | b64decode | regex_search("algorithm\s+(.*);$","\1",multiline=True) | first }}'
-            rfc2136_tsig_keyname: '{{ tsig_ret.content | b64decode | regex_search("key\s+.([a-z0-9-.]+).*$","\1",multiline=True) | first }}'
+            bind_deployed: "{{ helm_list_reg.stdout | from_json | selectattr('name','search','bind') | list | count > 0 }}"
+            dns_forwarders: "{{ dns_forwarders_reg.stdout | split | ansible.utils.ipv4 | list }}"
+            dns_search: "{{ dns_search_reg.stdout | split }}"
+            rfc2136_tsig_secret: '{{ tsig_reg.content | b64decode | regex_search("secret\s+.(.*).;$","\1",multiline=True) | first }}'
+            rfc2136_tsig_secret_alg: '{{ tsig_reg.content | b64decode | regex_search("algorithm\s+(.*);$","\1",multiline=True) | first }}'
+            rfc2136_tsig_keyname: '{{ tsig_reg.content | b64decode | regex_search("key\s+.([a-z0-9-.]+).*$","\1",multiline=True) | first }}'
+            tsig_secret_data:
+              - key: "{{ tsig_name }}"
+                value: "{{ tsig_reg.content }}"
 
         - name: Create tsig secret
           kubernetes.core.k8s:
@@ -179,16 +138,16 @@
               apiVersion: v1
               kind: Secret
               metadata:
-                name: tsigkey-fake-sydney-edu-au
+                name: "{{ tsig_name_meta }}"
                 namespace: default
-              data:
-                tsigkey-fake.sydney.edu.au: "{{ tsig_ret.content }}"
+              data: "{{ tsig_secret_data | items2dict }}"
           run_once: true
           notify:
             - Update bind server
 
         - name: Deploy bind9
           when:
+            - not bind_deployed
             - dns_forwarders
           kubernetes.core.helm:
             binary_path: "{{ helm }}"
@@ -220,34 +179,35 @@
           ansible.builtin.set_fact:
             dns_server: "{{ bind_service_info.resources.0.status.loadBalancer.ingress.0.ip }}"
 
-        - name: Set facts
-          ansible.builtin.set_fact:
-            coredns_corefile: '{{
-              coredns_configmap.resources.0.data.Corefile |
-              regex_replace(
-                "(\s+forward\s.*\n?)+",
-                ("\n%4sforward fake.sydney.edu.au. %s\n%4sforward . /etc/resolv.conf\n"|format("",dns_server,"")),
-                multiline=True)
-              }}'
-        # - ansible.builtin.debug:
-        #     var: coredns_corefile
-
-        - name: Update coredns
+        - name: Coredns
           when:
-            - "'forward fake.sydney.edu.au.' not in coredns_configmap.resources.0.data.Corefile"
-          kubernetes.core.k8s:
-            apply: true
-            kubeconfig: "{{ kubeconfig }}"
-            state: present
-            definition: "{{ coredns_configmap.resources.0 | combine({'data': {'Corefile': coredns_corefile}}) }}"
-          notify:
-            - Restart coredns
+            - "('forward %s. %s'|format(dns_domain,dns_server)) not in coredns_configmap.resources.0.data.Corefile"
+          block:
+            - name: Set facts
+              ansible.builtin.set_fact:
+                coredns_corefile: '{{
+                  coredns_configmap.resources.0.data.Corefile |
+                  regex_replace(
+                    "(\s+forward\s.*\n?)+",
+                    ("\n%4sforward %s. %s\n%4sforward . /etc/resolv.conf\n"|format("",dns_domain,dns_server,"")),
+                    multiline=True)
+                  }}'
+            # - ansible.builtin.debug: {var: coredns_corefile}
+
+            - name: Update coredns
+              kubernetes.core.k8s:
+                apply: true
+                kubeconfig: "{{ kubeconfig }}"
+                state: present
+                definition: "{{ coredns_configmap.resources.0 | combine({'data': {'Corefile': coredns_corefile}}) }}"
+              notify:
+                - Restart coredns
 
         - name: Update resolved
           ansible.builtin.copy:
             content: |
               [Resolve]
-              DNS={{ dns_server }}#fake.sydney.edu.au
+              DNS={{ dns_server }}#{{ dns_domain }}
             dest: /etc/systemd/resolved.conf.d/50_microk8s_external_dns.conf
             mode: "0644"
           notify:
@@ -294,3 +254,8 @@
         cmd: microk8s kubectl -n kube-system rollout restart deployment coredns
       changed_when: false
       run_once: true
+
+    - name: Restart resolved
+      ansible.builtin.service:
+        name: systemd-resolved.service
+        state: restarted

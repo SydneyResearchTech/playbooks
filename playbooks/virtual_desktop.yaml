@@ -1,0 +1,124 @@
+- name: Linux Virtual Desktop
+  hosts: "{{ target|default('all') }}"
+  become: true
+  vars:
+    vdi_default_target: multi-user.target
+    vdi_ssh_known_hosts: []
+    vdi_virtualgl_version: "latest"
+    docker_insecure_registeries: [localhost:32000]
+    docker_users: [ubuntu]
+    microk8s_users: [ubuntu]
+
+  pre_tasks:
+    - name: Ansible facts
+      ansible.builtin.file:
+        mode: "0755"
+        path: "{{ item }}"
+        state: directory
+      with_items:
+        - /etc/ansible
+        - /etc/ansible/facts.d
+
+    - name: PCI facts
+      ansible.builtin.copy:
+        dest: /etc/ansible/facts.d/pci_slots.fact
+        mode: "755"
+        src: ansible/facts.d/lspci2json.py
+      register: lspci2json_py
+
+    - name: Reload facts # noqa: no-handler
+      when: lspci2json_py.changed
+      ansible.builtin.setup:
+        filter: ansible_local
+
+    - name: Add ssh known hosts
+      ansible.builtin.known_hosts:
+        hash_host: true
+        key: "{{ item.key }}"
+        name: "{{ item.name }}"
+        path: /etc/ssh/ssh_known_hosts
+        state: present
+      with_items: "{{ vdi_ssh_known_hosts }}"
+
+  roles:
+    - role: restek.core.apptainer
+    - role: restek.core.docker
+    - role: restek.core.microk8s
+
+  tasks:
+    - name: Update package cache if required
+      when: "'Debian' in ansible_os_family"
+      ansible.builtin.apt:
+        cache_valid_time: 86400
+        update_cache: true
+
+    - name: NVIDIA drivers and CUDA
+      ansible.builtin.import_tasks: tasks/nvidia_Ubuntu.yml
+
+    # https://rawcdn.githack.com/VirtualGL/virtualgl/main/doc/index.html
+    # https://virtualgl.org/Downloads/YUM
+    - name: VirtualGL GPG
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail;
+          wget -q -O- https://packagecloud.io/dcommander/virtualgl/gpgkey |
+          gpg --dearmor >/etc/apt/trusted.gpg.d/VirtualGL.gpg
+        creates: /etc/apt/trusted.gpg.d/VirtualGL.gpg
+        executable: /bin/bash
+
+    - name: VirtualGL repository
+      ansible.builtin.apt_repository:
+        filename: virtualgl
+        repo: >-
+          deb
+          [signed-by=/etc/apt/trusted.gpg.d/VirtualGL.gpg]
+          https://packagecloud.io/dcommander/virtualgl/any/ any main
+        state: present
+        update_cache: true
+
+    - name: Install desktop
+      ansible.builtin.package:
+        name:
+          - git
+          - ubuntu-mate-desktop
+          - snapd
+          - virtualgl
+          - xrdp
+        state: present
+
+    # https://snapcraft.io/docs/installing-snapd
+    - name: Snap enable classic support
+      when: "'Fedora' in ansible_distribution"
+      ansible.builtin.file:
+        path: /snap
+        src: /var/lib/snapd/snap
+        state: link
+
+    - name: Isolate multi-user # noqa: command-instead-of-module
+      ansible.builtin.command:
+        cmd: systemctl isolate multi-user.target
+      changed_when: false
+
+    - name: Set default multi-user
+      ansible.builtin.command:
+        cmd: systemctl set-default multi-user.target
+      changed_when: false
+
+    - name: Install snaps classic
+      community.general.snap:
+        classic: true
+        name: "{{ item }}"
+        state: present
+      with_items:
+        - aws-cli
+        - helm
+        - kubectl
+        - lxd
+
+  post_tasks:
+    - name: Uninstall mate-power-manager
+      ansible.builtin.package:
+        name: mate-power-manager
+        state: absent
+
+  handlers: []

@@ -1,0 +1,20 @@
+---
+# tasks file for apptainer
+- name: Set facts
+  ansible.builtin.set_fact:
+    apptainer_package: "{{ apptainer_suid | ternary('apptainer-suid', 'apptainer') }}"
+
+- name: Install
+  ansible.builtin.include_tasks:
+    file: "{{ item }}"
+  with_first_found:
+    - files:
+        - install_{{ ansible_distribution }}.yml
+
+- name: Configure apptainer.conf
+  ansible.builtin.template:
+    backup: true
+    dest: /etc/apptainer/apptainer.conf
+    lstrip_blocks: true
+    mode: "0644"
+    src: apptainer.conf.j2

@@ -1,0 +1,75 @@
+---
+# tasks file for docker
+- name: Update package cache if required
+  when: "'Debian' in ansible_os_family"
+  ansible.builtin.apt:
+    cache_valid_time: 86400
+    update_cache: true
+
+- name: Uninstall old versions
+  ansible.builtin.package:
+    name:
+      - containerd
+      - docker.io
+      - docker-compose
+      - docker-compose-v2
+      - docker-doc
+      - podman-docker
+      - runc
+    state: absent
+
+- name: Set facts
+  ansible.builtin.set_fact:
+    architecture: "{{ (ansible_architecture == 'aarch64') | ternary('arm64', ansible_architecture) }}"
+
+- name: Install GPG signing key
+  ansible.builtin.get_url:
+    dest: /etc/apt/keyrings/docker.asc
+    mode: "0644"
+    url: https://download.docker.com/linux/ubuntu/gpg
+
+- name: Configure repository
+  ansible.builtin.apt_repository:
+    filename: docker
+    repo: >-
+      deb
+      [arch={{ architecture }} signed-by=/etc/apt/keyrings/docker.asc]
+      https://download.docker.com/linux/ubuntu
+      {{ ansible_distribution_release }}
+      stable
+    state: present
+    update_cache: true
+
+- name: Install
+  ansible.builtin.package:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+
+- name: Add users to docker group
+  ansible.builtin.user:
+    append: true
+    groups: [docker]
+    name: "{{ item }}"
+  with_items: "{{ docker_users }}"
+
+- name: Configure daemon
+  ansible.builtin.copy:
+    content: |
+      {
+        "insecure-registries": {{ docker_insecure_registeries | to_json }}
+      }
+    dest: /etc/docker/daemon.json
+    mode: "0644"
+  notify:
+    - Restart docker
+
+- name: Enable docker service
+  ansible.builtin.service:
+    enabled: true
+    name: docker
+    state: started

@@ -1,0 +1,19 @@
+---
+# tasks file for apptainer
+- name: Install Pre-requisite
+  ansible.builtin.package:
+    name:
+      - software-properties-common
+    state: present
+
+- name: Configure repository
+  ansible.builtin.apt_repository:
+    repo: ppa:apptainer/ppa
+    state: present
+    update_cache: true
+
+- name: Install
+  ansible.builtin.package:
+    name:
+      - "{{ apptainer_package }}"
+    state: present

@@ -1,0 +1,6 @@
+---
+- name: Test apptainer
+  hosts: localhost
+  remote_user: root
+  roles:
+    - apptainer

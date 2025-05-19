@@ -63,6 +63,41 @@ ansible-pull -clocal -i,localhost \
 | ---- | ------- | ----- |
 | microk8s | Install and configure MicroK8s on a single node. |
 
+## Cloud-init example
+
+If using cloud-init to initiate Ansible playbooks.
+
+```yaml
+#cloud-config
+ansible:
+  galaxy:
+    actions:
+    - ["ansible-galaxy","collection","install","git+https://github.com/SydneyResearchTech/playbooks.git"]
+  install_method: distro
+  package_name: ansible
+  run_user: ubuntu
+  setup_controller:
+    run_ansible:
+    - playbook_name: virtual_desktop.yaml
+      playbook_dir: "/home/ubuntu/.ansible/collections/ansible_collections/restek/core/playbooks"
+      extra_vars: target=localhost
+      connection: local
+apt:
+  sources:
+    ansible:
+      source: ppa:ansible/ansible
+keyboard:
+  layout: us
+locale: en_AU.utf-8
+packages:
+- git
+- python3
+- python3-pip
+- software-properties-common
+ssh_import_id: ['gh:dean-taylor']
+timezone: Australia/Perth
+```
+
 ## Complex deployments
 
 For more complex deployments you will need to pre-configure an inventory on your ansible run host.
@@ -76,11 +111,23 @@ Ref.
 NB: An issue with ansible-pull and an inventory directory (as apposed to a single file) has been found.
 Ansible-pull will not use the local group_vars or host_vars settings when an inventory directory is used even though the inventory rules are honoured.
 
+Using the Ansible Collection
+
+```bash
+# Install the Ansible Collection onto the Ansible run host.
+ansible-galaxy collection install git+https://github.com/SydneyResearchTech/playbooks.git
+
+# Run the appropriate Ansible playbook.
+ansible-playbook -i<PATH_TO_INVENTORY_FILE_OR_DIRECTORY> -e 'target=<GROUP_NAME>' restek.core.edge_compute
+```
+
+Using Ansible pull operation
+
 ```bash
 ansible-pull -i<PATH_TO_INVENTORY_FILE_OR_DIRECTORY> -e 'target=<GROUP_NAME>' \
  -U https://github.com/SydneyResearchTech/playbooks.git \
- -d ~/.ansible/collections/ansible_collections/restek/core \
- playbooks/edge_compute.yaml
+ -d ~/.ansible/collections/ansible_collections/restek/core/playbooks \
+ edge_compute.yaml
 
 # OR add a more comprehensive configuration that includes the inventory path
 cat <<EOT |sudo tee -a /etc/ansible/ansible.cfg

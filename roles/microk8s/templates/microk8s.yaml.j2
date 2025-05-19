@@ -7,8 +7,10 @@ extraCNIEnv:
   IPv4_SUPPORT: {{ microk8s_cni_ipv4_enabled | to_json }}
   IPv4_CLUSTER_CIDR: {{ microk8s_cni_ipv4_cluster_cidr }}
   IPv4_SERVICE_CIDR: {{ microk8s_cni_ipv4_service_cidr }}
+{% if microk8s_cni_ipv6_enabled %}
   IPv6_SUPPORT: {{ microk8s_cni_ipv6_enabled | to_json }}
   IPv6_CLUSTER_CIDR: {{ microk8s_cni_ipv6_cluster_cidr }}
   IPv6_SERVICE_CIDR: {{ microk8s_cni_ipv6_service_cidr }}
+{% endif %}
 extraSANs:
   - {{ microk8s_cni_ipv4_service_cidr | ansible.utils.ipaddr('1') }}

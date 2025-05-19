@@ -7,7 +7,7 @@
       }}"
 # - ansible.builtin.debug: {var: metallb_address_pool}
 
-- name: Microk8s enable metallb
+- name: Enable metallb
   ansible.builtin.command:
     cmd: microk8s enable metallb:{{ metallb_address_pool | join(',') }}
   register: metallb_reg

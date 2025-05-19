@@ -1,0 +1,54 @@
+# NVIDIA
+# https://documentation.ubuntu.com/server/how-to/graphics/install-nvidia-drivers/index.html#nvidia-drivers-installation
+# https://docs.nvidia.com/cuda/cuda-installation-guide-linux/#meta-packages
+- name: NVIDIA drivers available
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      ubuntu-drivers list --gpgpu
+      | grep '-server'
+      | sort -r
+    executable: /bin/bash
+  changed_when: false
+  register: drivers_reg
+
+- name: Set fact NVIDIA driver
+  ansible.builtin.set_fact:
+    nvidia_driver_name: "{{ drivers_reg.stdout_lines | first | default('') | split(',') | first }}"
+
+- name: Set fact NVIDIA driver version
+  ansible.builtin.set_fact:
+    nvidia_driver_branch: "{{ (nvidia_driver_name | split('-'))[2] | default('') }}"
+
+- name: NVIDIA and CUDA
+  when: nvidia_driver_branch
+  block:
+    - name: NVIDIA pre-req.
+      ansible.builtin.package:
+        name:
+          - dkms
+        state: present
+
+    - name: NVIDIA install
+      ansible.builtin.package:
+        name:
+          - nvidia-dkms-{{ nvidia_driver_branch }}-server
+          - nvidia-driver-{{ nvidia_driver_branch }}-server
+          - nvidia-fabricmanager-{{ nvidia_driver_branch }}
+          - libnvidia-nscq-{{ nvidia_driver_branch }}
+        state: present
+
+    - name: CUDA keyring install
+      ansible.builtin.apt:
+        deb: "https://developer.download.nvidia.com/compute/cuda/repos\
+          /ubuntu{{ ansible_distribution_version | split('.') | join }}\
+          /{{ ansible_architecture }}\
+          /cuda-keyring_1.1-1_all.deb"
+        state: present
+
+    - name: CUDA toolkit and driver install
+      ansible.builtin.apt:
+        name:
+          - cuda
+        state: present
+        update_cache: true
