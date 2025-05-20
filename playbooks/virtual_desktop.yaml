@@ -50,32 +50,7 @@
       desktop_target_default: multi-user.target
       desktop_virtualgl_enabled: true
 
-  tasks:
-    - name: Update package cache if required
-      when: "'Debian' in ansible_os_family"
-      ansible.builtin.apt:
-        cache_valid_time: 86400
-        update_cache: true
-
-    # https://snapcraft.io/docs/installing-snapd
-    - name: Snap enable classic support
-      when: "'Fedora' in ansible_distribution"
-      ansible.builtin.file:
-        path: /snap
-        src: /var/lib/snapd/snap
-        state: link
-
-    - name: Isolate multi-user # noqa: command-instead-of-module
-      when: 0 > 1
-      ansible.builtin.command:
-        cmd: systemctl isolate multi-user.target
-      changed_when: false
-
-    - name: Set default multi-user
-      when: 0 > 1
-      ansible.builtin.command:
-        cmd: systemctl set-default multi-user.target
-      changed_when: false
+  tasks: []
 
   post_tasks:
     - name: Uninstall mate-power-manager
