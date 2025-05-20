@@ -34,8 +34,6 @@
             name: "{{ default_user }}"
             password: "{{ (password | default(default_password)) | password_hash }}"
             update_password: always
-          # notify:
-          #   - Expire password
 
         - name: SSHd password authentication
           ansible.builtin.copy:
@@ -48,16 +46,22 @@
           notify:
             - Reload sshd
 
-    - name: SSHd password authentication disable
-      ansible.builtin.file:
-        path: "{{ conf_path }}"
-        state: absent
-      notify:
-        - Reload sshd
+    - name: Disable SSHd password authentication and default user password
       when:
         - not active
+      block:
+        - name: SSHd password authentication disable
+          ansible.builtin.file:
+            path: "{{ conf_path }}"
+            state: absent
+          notify:
+            - Reload sshd
 
-    - name: Set tag
+        - name: Expire password
+          ansible.builtin.command: # noqa: no-changed-when
+            cmd: passwd --expire "{{ default_user }}"
+
+    - name: Set or remove password tag
       amazon.aws.ec2_tag:
         resource: "{{ instance_id }}"
         state: "{{ 'present' if active else 'absent' }}"
@@ -71,7 +75,3 @@
       ansible.builtin.service:
         name: sshd.service
         state: reloaded
-
-    - name: Expire password
-      ansible.builtin.command: # noqa: no-changed-when
-        cmd: passwd --expire "{{ default_user }}"

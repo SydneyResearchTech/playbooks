@@ -20,6 +20,7 @@ aws_profile: default
 calico_cidr: "100.64.0.0/10"
 calico_enabled: true
 calico_version: "3.29.1"
+ipv6: false
 karpenter_version: "1.1.1"
 kubernetes_version: "1.31"
 vpc_cidr: "192.168.0.0/16"
@@ -32,9 +33,9 @@ $ eksctl create cluster -f restek-uat-bootstrap.eks.yaml
 2025-01-08 11:05:47 [ℹ]  eksctl version 0.194.0
 2025-01-08 11:05:47 [ℹ]  using region ap-southeast-2
 2025-01-08 11:05:48 [ℹ]  setting availability zones to [ap-southeast-2a ap-southeast-2b ap-southeast-2c]
-2025-01-08 11:05:48 [ℹ]  subnets for ap-southeast-2a - public:192.168.0.0/19 private:192.168.96.0/19
-2025-01-08 11:05:48 [ℹ]  subnets for ap-southeast-2b - public:192.168.32.0/19 private:192.168.128.0/19
-2025-01-08 11:05:48 [ℹ]  subnets for ap-southeast-2c - public:192.168.64.0/19 private:192.168.160.0/19
+2025-01-08 11:05:48 [ℹ]  subnets for ap-southeast-2a - public:############### private:################
+2025-01-08 11:05:48 [ℹ]  subnets for ap-southeast-2b - public:############### private:################
+2025-01-08 11:05:48 [ℹ]  subnets for ap-southeast-2c - public:############### private:################
 2025-01-08 11:05:48 [ℹ]  using Kubernetes version 1.31
 2025-01-08 11:05:48 [ℹ]  creating EKS cluster "restek-uat" in "ap-southeast-2" region with
 2025-01-08 11:05:48 [ℹ]  will create a CloudFormation stack for cluster itself and 0 nodegroup stack(s)
@@ -62,8 +63,8 @@ $ eksctl create cluster -f restek-uat-bootstrap.eks.yaml
 2025-01-08 11:13:56 [ℹ]  successfully created addon
 2025-01-08 11:13:56 [ℹ]  creating addon
 2025-01-08 11:13:56 [ℹ]  successfully created addon
-2025-01-08 11:15:59 [ℹ]  checking arn arn:aws:iam::860821382453:role/KarpenterNodeRole-restek-uat against entries in the auth ConfigMap
-2025-01-08 11:15:59 [ℹ]  adding identity "arn:aws:iam::860821382453:role/KarpenterNodeRole-restek-uat" to auth ConfigMap
+2025-01-08 11:15:59 [ℹ]  checking arn arn:aws:iam::############:role/KarpenterNodeRole-restek-uat against entries in the auth ConfigMap
+2025-01-08 11:15:59 [ℹ]  adding identity "arn:aws:iam::############:role/KarpenterNodeRole-restek-uat" to auth ConfigMap
 2025-01-08 11:16:00 [ℹ]  waiting for the control plane to become ready
 2025-01-08 11:16:00 [✔]  saved kubeconfig as "/Users/dean/.kube/config"
 2025-01-08 11:16:00 [ℹ]  no tasks
@@ -102,8 +103,6 @@ The deployment machine and user account is:
 aws efs delete-file-system --file-system-id
 aws rds delete-db-instance --db-instance-identifier eks-restek-uat-*
 aws rds delete-db-cluster --db-cluster-identifier eks-restek-uat-*
-
-aws rds describe-
 ```
 
 ## ISSUES
@@ -151,14 +150,14 @@ eksctl enable flux -f restek-uat.eks.yaml
 2025-01-08 15:07:12 [ℹ]  no tasks
 2025-01-08 15:07:12 [✔]  created 0 nodegroup(s) in cluster "restek-uat"
 2025-01-08 15:07:13 [ℹ]  nodegroup "m7g-4xlarge" has 3 node(s)
-2025-01-08 15:07:13 [ℹ]  node "ip-192-168-48-170.ap-southeast-2.compute.internal" is ready
-2025-01-08 15:07:13 [ℹ]  node "ip-192-168-65-185.ap-southeast-2.compute.internal" is ready
-2025-01-08 15:07:13 [ℹ]  node "ip-192-168-8-193.ap-southeast-2.compute.internal" is ready
+2025-01-08 15:07:13 [ℹ]  node "ip-##############.ap-southeast-2.compute.internal" is ready
+2025-01-08 15:07:13 [ℹ]  node "ip-##############.ap-southeast-2.compute.internal" is ready
+2025-01-08 15:07:13 [ℹ]  node "ip-##############.ap-southeast-2.compute.internal" is ready
 2025-01-08 15:07:13 [ℹ]  waiting for at least 3 node(s) to become ready in "m7g-4xlarge"
 2025-01-08 15:07:13 [ℹ]  nodegroup "m7g-4xlarge" has 3 node(s)
-2025-01-08 15:07:13 [ℹ]  node "ip-192-168-48-170.ap-southeast-2.compute.internal" is ready
-2025-01-08 15:07:13 [ℹ]  node "ip-192-168-65-185.ap-southeast-2.compute.internal" is ready
-2025-01-08 15:07:13 [ℹ]  node "ip-192-168-8-193.ap-southeast-2.compute.internal" is ready
+2025-01-08 15:07:13 [ℹ]  node "ip-##############.ap-southeast-2.compute.internal" is ready
+2025-01-08 15:07:13 [ℹ]  node "ip-##############.ap-southeast-2.compute.internal" is ready
+2025-01-08 15:07:13 [ℹ]  node "ip-##############.ap-southeast-2.compute.internal" is ready
 2025-01-08 15:07:13 [✔]  created 1 managed nodegroup(s) in cluster "restek-uat"
 2025-01-08 15:07:15 [ℹ]  checking security group configuration for all nodegroups
 2025-01-08 15:07:15 [ℹ]  all nodegroups have up-to-date cloudformation templates

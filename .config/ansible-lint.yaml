@@ -6,9 +6,10 @@ exclude_paths:
   - .*.swp
   - .cache/
   - .git*
-  - roles/vpn/
   - tmp/
   - /requirements.yml
+  - /roles/3dslicer/
+  - /roles/vpn/
 
 skip_list:
   - run-once[task]

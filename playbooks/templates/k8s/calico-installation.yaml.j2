@@ -6,8 +6,20 @@ spec:
   calicoNetwork:
     bgp: Enabled
     ipPools:
-    - cidr: {{ calico_ipv4pool_cidr }}
-      encapsulation: IPIPCrossSubnet
+{% if ipv6 %}
+    - blockSize: 122
+      cidr: {{ calico_ipv6pool_cidr }}
+{% else %}
+    - blockSize: 26
+      cidr: {{ calico_ipv4pool_cidr }}
+{% endif %}
+      encapsulation: VXLANCrossSubnet
+      natOutgoing: Enabled
+      nodeSelector: all()
+{% if ipv6 %}
+    nodeAddressAutodetectionV6:
+      canReach: 2404:6800:4015:802::2003
+{% endif %}
   cni:
     type: Calico
   controlPlaneNodeSelector:

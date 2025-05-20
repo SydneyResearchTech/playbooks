@@ -1,0 +1,16 @@
+---
+# handlers file for desktop
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Isolate target
+  tags: [skip_ansible_lint]
+  ansible.builtin.command:
+    cmd: /usr/bin/systemctl isolate {{ desktop_target_default }}
+  changed_when: false
+
+- name: Update dconf
+  ansible.builtin.command:
+    cmd: /usr/bin/dconf update
+  changed_when: false

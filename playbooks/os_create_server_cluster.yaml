@@ -8,9 +8,9 @@
   force_handlers: true
   gather_facts: false
   vars:
-    os_cloud: nci-er01
-    #stack_name: MUST be provided as parameter
     dev: false
+    os_cloud: ""
+    stack_name: ""
     vip: 0
     hot_items:
       - env.hot.yaml
@@ -28,8 +28,8 @@
     - name: Assert
       ansible.builtin.assert:
         that:
-          - stack_name is defined
-          - os_cloud is defined
+          - stack_name | lenght > 0
+          - os_cloud | length > 0
           - vip >= 0
         msg: "'os_cloud', 'stack_name' must be defined"
 
@@ -94,8 +94,8 @@
       loop_control:
         index_var: idx
       register: vip_reg
-    #- ansible.builtin.debug: {var: vip_reg}
-    #- ansible.builtin.debug: {msg: "{{ vip_reg.results | community.general.json_query('[*].stack.outputs[?output_key==`fixed_ip_address`].output_value') }}"}
+    # - ansible.builtin.debug: {var: vip_reg}
+    # - ansible.builtin.debug: {msg: "{{ vip_reg.results | community.general.json_query('[*].stack.outputs[?output_key==`fixed_ip_address`].output_value') }}"}
 
     - name: OpenStack server list
       openstack.cloud.server_info:
@@ -115,7 +115,10 @@
           - stack_{{ stack_reg.stack.name }}
         name: "{{ item.name }}"
         ansible_host: "{{ item.access_ipv4 }}"
-        os_allowed_address_pairs: "{{ vip_reg.results | community.general.json_query('[*].stack.outputs[?output_key==`fixed_ip_address`].output_value') | flatten }}"
+        os_allowed_address_pairs: >-
+          {{ vip_reg.results |
+          community.general.json_query('[*].stack.outputs[?output_key==`fixed_ip_address`].output_value') |
+          flatten }}
         os_network_id: "{{ (stack_reg.stack.outputs | community.general.json_query('[?output_key==`networkId`]')).0.output_value }}"
       with_items: "{{ servers_reg.servers }}"
 
@@ -124,9 +127,17 @@
   hosts: "stack_{{ stack_name }},&microk8s"
   become: true
   vars:
-    os_cloud: nci-er01
+    os_cloud: ""
+    stack_name: ""
 
   pre_tasks:
+    - name: Assert
+      ansible.builtin.assert:
+        that:
+          - stack_name | lenght > 0
+          - os_cloud | length > 0
+        msg: "'os_cloud', 'stack_name' must be defined"
+
     - name: OpenStack config.
       become: false
       block:
@@ -147,6 +158,7 @@
             cloud: "{{ os_cloud }}"
             allowed_address_pairs: "{{ os_allowed_address_pairs | community.general.json_query('[].{\"ip_address\": @}') }}"
             name: "{{ port_reg.ports.0.name }}"
+            network: ""
             state: present
           delegate_to: localhost
 
@@ -161,12 +173,13 @@
               {{ port_reg.ports.0.name }}
           delegate_to: localhost
           register: port_set_reg
+          changed_when: true
         # - ansible.builtin.debug: {var: port_set_reg}
 
         - name: Set fact microk8s_metallb_range
           when: os_allowed_address_pairs
           ansible.builtin.set_fact:
-            microk8s_metallb_address_pool: "{{ os_allowed_address_pairs | product(['32']) | map('join','/') | list }}"
+            microk8s_metallb_address_pool: "{{ os_allowed_address_pairs | product(['32']) | map('join', '/') | list }}"
         # - ansible.builtin.debug: {var: microk8s_metallb_address_pool}
 
   roles:

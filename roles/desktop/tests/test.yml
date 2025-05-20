@@ -1,6 +1,6 @@
 ---
-- name: Named test
+- name: Test desktop role
   hosts: localhost
   remote_user: root
   roles:
-    - named
+    - restek.core.desktop

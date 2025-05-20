@@ -1,0 +1,26 @@
+# https://rawcdn.githack.com/VirtualGL/virtualgl/main/doc/index.html
+# https://virtualgl.org/Downloads/YUM
+- name: VirtualGL GPG
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      wget -q -O- https://packagecloud.io/dcommander/virtualgl/gpgkey |
+      gpg --dearmor >/etc/apt/trusted.gpg.d/VirtualGL.gpg
+    creates: /etc/apt/trusted.gpg.d/VirtualGL.gpg
+    executable: /bin/bash
+
+- name: VirtualGL repository
+  ansible.builtin.apt_repository:
+    filename: virtualgl
+    repo: >-
+      deb
+      [signed-by=/etc/apt/trusted.gpg.d/VirtualGL.gpg]
+      https://packagecloud.io/dcommander/virtualgl/any/ any main
+    state: present
+    update_cache: true
+
+- name: VirtualGL install
+  ansible.builtin.package:
+    name:
+      - virtualgl
+    state: present

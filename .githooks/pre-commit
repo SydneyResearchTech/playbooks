@@ -47,7 +47,7 @@ if which python3 &>/dev/null; then
 	python3 -m pip freeze |grep -q '^ansible-lint==' || \
 		python3 -m pip install -U --user ansible-lint
 	python3 -m ansiblelint -v --force-color \
-		--exclude $(git ls-files --others --exclude-standard) || EXIT_CODE=$?
+		--exclude "$(git ls-files --others --exclude-standard)" || EXIT_CODE=$?
 else
 	>&2 echo "Ansible lint not run. Python3 interpreter not found."
 fi

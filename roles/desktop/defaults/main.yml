@@ -1,0 +1,35 @@
+---
+# defaults file for desktop
+desktop_apptainer_enabled: true
+desktop_apptainer_cachedir: ""
+desktop_apptainer_tmpdir: ""
+desktop_apptainer_version: "latest"
+
+# http://conky.sourceforge.net/config_settings.html
+# http://conky.sourceforge.net/variables.html
+desktop_conky_enabled: true
+desktop_conky_default_interface: "{{ ansible_default_ipv4.interface }}"
+desktop_conky_alignment: top_right
+desktop_conky_config_extra: ""
+desktop_conky_default_color: white
+desktop_conky_default_outline_color: white
+desktop_conky_default_shade_color: white
+desktop_conky_double_buffer: true
+desktop_conky_own_window_argb_visual: true
+desktop_conky_own_window_hints: undecorated,below,sticky,skip_taskbar,skip_pager
+desktop_conky_own_window_transparent: true
+desktop_conky_own_window_type: normal
+desktop_conky_update_interval: 5.0
+desktop_conky_file_systems: []
+desktop_conky_text_extra: ""
+
+desktop_gnome_nfs_user_home: false
+desktop_gnome_settings: []
+desktop_gnome_setting_locks: []
+
+desktop_target_default: graphical.target
+
+desktop_virtualgl_enabled: true
+desktop_virtualgl_version: latest
+
+desktop_xdg_data_dirs: []

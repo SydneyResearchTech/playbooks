@@ -15,10 +15,10 @@ addonsConfig:
 addons:
   - name: kube-proxy
   - name: coredns
-  - name: eks-pod-identity-agent
-{% if not calico_enabled %}
+{% if not (calico_enabled and not ipv6) %}
   - name: vpc-cni
 {% endif %}
+  - name: eks-pod-identity-agent
 {% for addon in addons %}
   - name: {{ addon }}
 {% endfor %}
@@ -64,6 +64,27 @@ iamIdentityMappings:
       # For more information, see https://github.com/aws/karpenter/issues/5099.
       # - eks:kube-proxy-windows
 
+kubernetesNetworkConfig:
+  ipFamily: {{ ipv6 | ternary('IPv6', 'IPv4') }}
+  # serviceIPv4CIDR: ""
+
+vpc:
+  clusterEndpoints:
+    privateAccess: false
+    publicAccess: true
+{% if vpc_id is defined and vpc_id %}
+  id: {{ vpc_id }}
+{% else %}
+  cidr: {{ vpc_cidr }}
+{% endif %}
+
+privateCluster:
+  enabled: false
+  skipEndpointCreation: false
+
+secretsEncryption:
+  keyARN: "{{ key_arn }}"
+
 {% if not bootstrap %}
 gitops:
   flux:
@@ -104,20 +125,3 @@ managedNodeGroups:
     updateConfig:
       maxUnavailable: 1
 {% endif %}
-
-vpc:
-  clusterEndpoints:
-    privateAccess: false
-    publicAccess: true
-{% if vpc_id is defined and vpc_id %}
-  id: {{ vpc_id }}
-{% else %}
-  cidr: {{ vpc_cidr }}
-{% endif %}
-
-privateCluster:
-  enabled: false
-  skipEndpointCreation: false
-
-secretsEncryption:
-  keyARN: "{{ key_arn }}"

@@ -1,6 +1,0 @@
----
-# defaults file for named
-named_forwarders: []
-# - 1.1.1.1
-# - 8.8.8.8
-named_zones: [fake.sydney.edu.au]

@@ -1,0 +1,48 @@
+---
+# tasks file for desktop
+- name: Update package cache if required
+  when: "'Debian' in ansible_os_family"
+  ansible.builtin.apt:
+    cache_valid_time: 86400
+    update_cache: true
+
+- name: NVIDIA drivers and CUDA
+  ansible.builtin.include_tasks: nvidia/Ubuntu.yml
+
+- name: VirtualGL
+  when: desktop_virtualgl_enabled
+  ansible.builtin.include_tasks: virtualgl/Debian.yml
+
+# https://snapcraft.io/docs/installing-snapd
+- name: Install
+  ansible.builtin.package:
+    name:
+      - git
+      - ubuntu-mate-desktop
+      - s3fs
+      - snapd
+      - xrdp
+    state: present
+
+- name: Install snaps (classic)
+  community.general.snap:
+    classic: true
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - aws-cli
+    - helm
+    - kubectl
+    - lxd
+
+- name: Conky
+  ansible.builtin.include_tasks: conky/Debian.yml
+
+- name: Set default target
+  ansible.builtin.file:
+    src: "/lib/systemd/system/{{ desktop_target_default }}"
+    dest: /etc/systemd/system/default.target
+    state: link
+  notify:
+    - Reload systemd
+    - Isolate target

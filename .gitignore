@@ -1,5 +1,9 @@
 .*.swp
 /tmp/
 __pycache__/
+*-disabled
+/docs/openstack.md
+/docs/temp.md
 /playbooks/tasks/postfix.*
 /roles/vpn/
+/roles/3dslicer/
