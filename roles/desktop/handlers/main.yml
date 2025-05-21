@@ -14,8 +14,3 @@
   ansible.builtin.command:
     cmd: /usr/bin/dconf update
   changed_when: false
-
-- name: Restart virtual_desktop timer
-  ansible.builtin.service:
-    name: virtual_desktop.timer
-    state: restart

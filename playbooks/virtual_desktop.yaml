@@ -4,6 +4,7 @@
   vars:
     vdi_default_target: multi-user.target
     vdi_ssh_known_hosts: []
+    vdi_sync: true
     vdi_virtualgl_version: "latest"
 
   pre_tasks:
@@ -50,7 +51,31 @@
       desktop_target_default: multi-user.target
       desktop_virtualgl_enabled: true
 
-  tasks: []
+  tasks:
+    - name: Sync configuration
+      when: vdi_sync
+      block:
+        - name: Install systemd timer
+          ansible.builtin.copy:
+            dest: /etc/systemd
+            directory_mode: "0755"
+            mode: preserve
+            src: systemd
+          notify:
+            - Reload systemd
+            - Restart virtual_desktop timer
+          register: timer_reg
+
+        - name: Reload systemd # noqa no-handler
+          when: timer_reg.changed
+          ansible.builtin.systemd:
+            daemon_reload: true
+
+        - name: Start virtual desktop timer
+          ansible.builtin.service:
+            enabled: true
+            name: virtual_desktop.timer
+            state: started
 
   post_tasks:
     - name: Uninstall mate-power-manager
@@ -58,4 +83,12 @@
         name: mate-power-manager
         state: absent
 
-  handlers: []
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Restart virtual_desktop timer
+      ansible.builtin.service:
+        name: virtual_desktop.timer
+        state: restart
