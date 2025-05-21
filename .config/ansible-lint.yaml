@@ -1,6 +1,6 @@
 ---
 # .config/ansible-lint.yaml
-profile: null
+profile: production
 
 exclude_paths:
   - .*.swp

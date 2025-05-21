@@ -15,7 +15,7 @@
       # - aws-mountpoint-s3-csi-driver
       # - amazon-cloudwatch-observability
     aws_profile: default
-    calico_enabled: true
+    calico_enabled: false
     calico_ipv4pool_cidr: "172.16.0.0/16"
     calico_ipv6pool_cidr: "fd10:28d:94c::/48"
     calico_version: "3.29.1"
@@ -23,7 +23,7 @@
     cluster_name: ""
     eksctl_create: false
     flux_dir: "{{ (lookup('ansible.builtin.env', 'HOME'), 'flux') | path_join }}"
-    ipv6: false
+    ipv6: true
     karpenter_namespace: kube-system
     karpenter_version: "1.1.1"
     kubernetes_version: "1.31"

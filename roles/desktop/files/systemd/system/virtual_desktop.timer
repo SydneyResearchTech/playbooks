@@ -1,0 +1,11 @@
+[Unit]
+Description=Ansible playbook restek.core.virtual_desktop
+
+[Timer]
+OnBootSec=1m
+OnUnitActiveSec=24h
+Persistent=true
+Unit=ansible-playbook@restek.core.virtual_desktop.service
+
+[Install]
+WantedBy=multi-user.target

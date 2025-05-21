@@ -1,0 +1,6 @@
+[Unit]
+Description=Ansible playbook run for Desktop configuration
+
+[Service]
+ExecStart=/etc/systemd/bin/ansible-playbook -c local -e target=localhost %i
+User=ubuntu

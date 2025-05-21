@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+SYSD_COLLECTION=git+https://github.com/SydneyResearchTech/playbooks.git
+SYSD_DIR=$HOME/.ansible/collections/ansible_collections/restek/core
+
+if [[ $(find "${SYSD_DIR}" -mtime +1 -print) ]]; then
+  echo "ansible-galaxy collection install --force ${SYSD_COLLECTION}"
+  ansible-galaxy collection install --force "${SYSD_COLLECTION}"
+fi
+
+ansible-playbook "$@"

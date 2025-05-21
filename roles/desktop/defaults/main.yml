@@ -27,6 +27,8 @@ desktop_gnome_nfs_user_home: false
 desktop_gnome_settings: []
 desktop_gnome_setting_locks: []
 
+# Ansible playbook collection update and run every 24 hours
+desktop_sync: true
 desktop_target_default: graphical.target
 
 desktop_virtualgl_enabled: true
