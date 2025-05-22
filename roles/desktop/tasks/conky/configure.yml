@@ -1,12 +1,12 @@
 # roles/desktop/tasks/conky/configure.yml
-- name: Conky conf
+- name: Configure conky
   ansible.builtin.template:
     dest: /etc/conky/conky.conf
     lstrip_blocks: true
     mode: "0644"
     src: conky.conf.j2
 
-- name: Conky autostart
+- name: Autostart conky
   ansible.builtin.copy:
     content: |
       [Desktop Entry]

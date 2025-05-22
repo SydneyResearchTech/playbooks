@@ -1,0 +1,71 @@
+# roles/desktop/tasks/gnome/configure.yml
+# https://help.gnome.org/admin/system-admin-guide/3.8/dconf-custom-defaults.html.en
+# https://help.gnome.org/admin/system-admin-guide/stable/dconf-lockdown.html.en
+# https://help.gnome.org/admin/system-admin-guide/stable/dconf-nfs-home.html.en
+- name: Create gnome settings directories
+  ansible.builtin.file:
+    mode: "0755"
+    path: "{{ item }}"
+    state: directory
+  with_items:
+    - /etc/dconf/db/local.d
+    - /etc/dconf/db/local.d/locks
+    - /etc/dconf/profile
+
+- name: Create gnome profile
+  when: (desktop_gnome_settings | length > 0) or desktop_gnome_nfs_user_home
+  ansible.builtin.copy: # noqa jinja[spacing]
+    content: |
+      {%- if desktop_gnome_nfs_user_home %}
+      service-db:keyfile/user
+      {% endif %}
+      {%- if desktop_gnome_settings | length > 0 %}
+      user-db:user
+      system-db:local
+      {%- endif %}
+    dest: /etc/dconf/profile/user
+    mode: "0644"
+
+- name: Configure gnome local settings
+  when: desktop_gnome_settings | length > 0
+  block:
+    - name: Create gnome local default settings
+      ansible.builtin.template:
+        dest: /etc/dconf/db/local.d/00_ansible-desktop-defaults
+        lstrip_blocks: true
+        mode: "0644"
+        src: dconf/keyfile.j2
+      notify:
+        - Update dconf
+
+    - name: Create gnome local default setting locks
+      ansible.builtin.template:
+        dest: /etc/dconf/db/local.d/locks/00_ansible-desktop-defaults
+        lstrip_blocks: true
+        mode: "0644"
+        src: dconf/database_locks.j2
+      notify:
+        - Update dconf
+
+- name: Configure gnome environment
+  when: desktop_xdg_config_dirs or desktop_xdg_data_dirs
+  ansible.builtin.copy:
+    content: |
+      {% if desktop_xdg_config_dirs %}
+      if [ -z "$XDG_CONFIG_DIRS" ]; then
+        XDG_CONFIG_DIRS={{ desktop_xdg_config_dirs | join(':') | quote }}
+      else
+        XDG_CONFIG_DIRS="{{ desktop_xdg_config_dirs | join(':') }}:$XDG_CONFIG_DIRS"
+      fi
+      export XDG_CONFIG_DIRS
+      {% endif %}
+      {% if desktop_xdg_data_dirs %}
+      if [ -z "$XDG_DATA_DIRS" ]; then
+        XDG_DATA_DIRS={{ desktop_xdg_data_dirs | join(':') | quote }}
+      else
+        XDG_DATA_DIRS="{{ desktop_xdg_data_dirs | join(':') }}:${XDG_DATA_DIRS}"
+      fi
+      export XDG_DATA_DIRS
+      {% endif %}
+    dest: /etc/profile.d/xdg_dirs_ansible_role_desktop.sh
+    mode: "0644"

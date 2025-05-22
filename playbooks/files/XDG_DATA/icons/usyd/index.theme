@@ -1,0 +1,15 @@
+[Icon Theme]
+Name=Usyd
+Comment=Icon theme for The University of Sydney
+Inherits=hicolor,default
+Directories=48x48/apps,96x96/apps
+
+[48x48/apps]
+Size=48
+Type=fixed
+Context=Applications
+
+[96x96/apps]
+Size=96
+Type=fixed
+Context=Applications

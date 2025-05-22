@@ -1,0 +1,60 @@
+# https://docs.aws.amazon.com/dcv/latest/adminguide/setting-up-installing-linux-server.html
+- name: Set facts
+  ansible.builtin.set_fact:
+    nice_dcv_package_name: nice-dcv-{{ desktop_nice_dcv_version }}-ubuntu{{ ansible_distribution_version | split('.') | join }}-{{ ansible_architecture }}
+
+- name: Nice dcv pre-req.
+  ansible.builtin.package:
+    name:
+      - dkms
+      - pulseaudio-utils
+    state: present
+
+# - name: Nice dcv add gpg key
+#   https://d1uj6qtbmh3dt5.cloudfront.net/NICE-GPG-KEY
+
+- name: Nice dcv download package
+  ansible.builtin.get_url:
+    dest: /usr/local/src/{{ nice_dcv_package_name }}.tgz
+    mode: "0644"
+    url: "https://d1uj6qtbmh3dt5.cloudfront.net/\
+      {{ desktop_nice_dcv_version | split('-') | first }}/Servers/{{ nice_dcv_package_name }}.tgz"
+
+- name: Nice dcv package unzip
+  ansible.builtin.unarchive:
+    dest: /usr/local/src
+    remote_src: true
+    src: /usr/local/src/{{ nice_dcv_package_name }}.tgz
+
+- name: Nice dcv package names?
+  ansible.builtin.find:
+    paths:
+      - /usr/local/src/{{ nice_dcv_package_name }}
+    patterns:
+      - '^nice-x?dcv.*\.deb$'
+    use_regex: true
+  register: nice_dcv_packages_reg
+
+- name: Nice dcv install
+  ansible.builtin.apt:
+    deb: "{{ item }}"
+    state: present
+  with_items: "{{ nice_dcv_packages_reg.files | map(attribute='path') }}"
+
+# - name: DKMS list?
+#   ansible.builtin.command:
+#     cmd: dkms status
+#   changed_when: false
+#   register: dkms_status_reg
+#   when: dkms_status_reg.stdout_lines | select('search', '^eveusb/[0-9.]+.*installed$') | list | length == 0
+
+- name: Nice dcv install usb driver
+  ansible.builtin.command:
+    cmd: /usr/bin/dcvusbdriverinstaller --quiet
+    creates: /var/lib/dkms/eveusb/1.0.0
+
+- name: Add nice dcv user to video group
+  ansible.builtin.user:
+    append: true
+    groups: [video]
+    name: dcv

@@ -17,12 +17,29 @@
 - name: Install
   ansible.builtin.package:
     name:
+      - default-jdk
+      - dnsutils
+      - filezilla
       - git
+      - libpam-google-authenticator
+      - libqrencode4
+      - lmod
+      - make
       - ubuntu-mate-desktop
       - s3fs
       - snapd
+      - vlc
       - xrdp
     state: present
+
+- name: Enable RDP service
+  ansible.builtin.service:
+    enabled: "{{ desktop_rdp_enabled }}"
+    name: "{{ item }}"
+    state: "{{ 'started' if desktop_rdp_enabled else 'stopped' }}"
+  with_items:
+    - xrdp.service
+    - xrdp-sesman.service
 
 - name: Install snaps (classic)
   community.general.snap:
@@ -35,8 +52,20 @@
     - kubectl
     - lxd
 
+- name: Unattended Upgrades
+  ansible.builtin.include_tasks: patching/Ubuntu.yml
+
+- name: Gconf GNOME
+  ansible.builtin.include_tasks: gnome/configure.yml
+
 - name: Conky
   ansible.builtin.include_tasks: conky/Debian.yml
+- name: Configure conky
+  ansible.builtin.include_tasks: conky/configure.yml
+
+- name: Install NICE DCV remote desktop
+  when: desktop_nice_dcv_enabled
+  ansible.builtin.include_tasks: nice-dcv/install_Ubuntu.yml
 
 - name: Set default target
   ansible.builtin.file:

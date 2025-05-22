@@ -1,0 +1,38 @@
+# roles/desktop/tasks/google_authenticator/main.yml
+# https://github.com/google/google-authenticator-libpam
+# TODO requires more work using packaged version
+- name: Pre-req.
+  ansible.builtin.package:
+    name:
+      - autoconf
+      - libpam0g-dev
+      - libtool
+    state: present
+
+- name: Download google authenticator
+  ansible.builtin.get_url:
+    dest: /usr/local/src/google-authenticator-libpam-1.11.tar.gz
+    mode: "0644"
+    url: https://github.com/google/google-authenticator-libpam/archive/refs/tags/1.11.tar.gz
+
+- name: Unarchive google authenticator
+  ansible.builtin.unarchive:
+    dest: /usr/local/src
+    remote_src: true
+    src: /usr/local/src/google-authenticator-libpam-1.11.tar.gz
+
+- name: Build google authenticator
+  become: false
+  ansible.builtin.command:
+    chdir: /usr/local/src/google-authenticator-libpam-1.11
+    cmd: |
+      ./bootstrap.sh
+      ./configure
+      make
+    creates: ???
+
+- name: Install google authenticator
+  ansible.builtin.command:
+    chdir: /usr/local/src/google-authenticator-libpam-1.11
+    cmd: make install
+    creates: ???

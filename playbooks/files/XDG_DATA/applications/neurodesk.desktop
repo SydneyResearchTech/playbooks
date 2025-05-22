@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=NeuroDesk
+Exec=/usr/local/bin/neurodesktop-run
+Terminal=false
+Categories=Development;Education;Science;DataVisualization;Physics;

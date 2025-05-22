@@ -48,10 +48,40 @@
     - role: restek.core.desktop
       desktop_apptainer_enabled: true
       desktop_conky_enabled: true
+      desktop_conky_default_color: black
+      desktop_conky_default_outline_color: black
+      desktop_conky_default_shade_color: black
+      desktop_conky_update_interval: 5.0
+      desktop_conky_text_extra: |
+        $color$hr
+        ${color lightgrey}Department:$color Australian Imaging Service
+        ${color lightgrey}Institution:$color The University of Sydney
+        ${color lightgrey}Contact:$color ais.admin@sydney.edu.au
+      desktop_nice_dcv_enabled: "{{ 'Amazon' in ansible_system_vendor }}"
+      desktop_rdp_enabled: true
       desktop_target_default: multi-user.target
       desktop_virtualgl_enabled: true
+      # run `gsettings list-schemas --print-paths` for available settings.
+      desktop_gnome_settings:
+        org/mate/desktop/background:
+          picture-filename: /usr/local/share/backgrounds/usyd_background_1920x1080.png
+        org/mate/desktop/interface:
+          icon-theme: usyd
+        org/mate/desktop/lockdown:
+          disable-user-switching: true
+        org/mate/panel/menubar:
+          icon-name: usyd_shield
+        org/mate/screensaver:
+          idle-activation-enabled: false
 
   tasks:
+    - name: XDG data
+      ansible.builtin.copy:
+        dest: /usr/local/share
+        directory_mode: "0755"
+        mode: "0644"
+        src: XDG_DATA/
+
     - name: Sync configuration
       when: vdi_sync
       block:

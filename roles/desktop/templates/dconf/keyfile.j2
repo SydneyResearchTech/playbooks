@@ -1,0 +1,6 @@
+{% for group,values in desktop_gnome_settings.items() %}
+[{{ group | replace('.','/') }}]
+  {% for setting,value in values.items() %}
+{{ setting }}={{ value | to_json | replace('"',"'") }}
+  {% endfor %}
+{% endfor %}

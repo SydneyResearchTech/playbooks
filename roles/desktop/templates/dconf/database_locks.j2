@@ -1,0 +1,5 @@
+{% for group,values in desktop_gnome_settings.items() %}
+  {% for setting,value in values.items() %}
+{{ group | replace('.','/') }}/{{ setting }}
+  {% endfor %}
+{% endfor %}

@@ -1,0 +1,41 @@
+# roles/desktop/tasks/patching/Ubuntu.yml
+- name: Install unattended upgrades
+  ansible.builtin.package:
+    name:
+      - unattended-upgrades
+      - apt-listchanges
+    state: present
+
+- name: Configure unattended upgrades
+  ansible.builtin.copy:
+    content: |
+      Unattended-Upgrade::Allowed-Origins {
+        "${distro_id}:${distro_codename}";
+        "${distro_id}:${distro_codename}-security";
+        // Extended Security Maintenance; doesn't necessarily exist for
+        // every release and this system may not have it installed, but if
+        // available, the policy for updates is such that unattended-upgrades
+        // should also install from here by default.
+        "${distro_id}ESMApps:${distro_codename}-apps-security";
+        "${distro_id}ESM:${distro_codename}-infra-security";
+        //  "${distro_id}:${distro_codename}-updates";
+        //  "${distro_id}:${distro_codename}-proposed";
+        //  "${distro_id}:${distro_codename}-backports";
+      };
+      Unattended-Upgrade::MinimalSteps "true";
+      Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+      Unattended-Upgrade::Remove-New-Unused-Dependencies "true";
+      Unattended-Upgrade::Remove-Unused-Dependencies "true";
+      Unattended-Upgrade::Automatic-Reboot "true";
+      Unattended-Upgrade::Automatic-Reboot-Time "02:00";
+      Unattended-Upgrade::SyslogEnable "true";
+    mode: "0644"
+    dest: /etc/apt/apt.conf.d/52unattended-upgrades-local
+
+- name: Activate unattended upgrades
+  ansible.builtin.copy:
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+    mode: "0644"
+    dest: /etc/apt/apt.conf.d/20auto-upgrades

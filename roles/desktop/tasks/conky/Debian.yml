@@ -1,10 +1,7 @@
 # roles/desktop/tasks/conky/Debian.yml
-- name: Conky install
+- name: Install conky
   ansible.builtin.package:
     name:
       - conky-std
     state: present
     update_cache: true
-
-- name: Conky configure
-  ansible.builtin.include_tasks: configure.yml

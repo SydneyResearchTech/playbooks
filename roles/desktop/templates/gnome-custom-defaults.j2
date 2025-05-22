@@ -1,0 +1,12 @@
+{% for dconf_group,dconf_group_values in desktop_gnome_settings.items() %}
+[{{ dconf_group }}]
+{% for dconf_group_key,dconf_group_value in dconf_group_values.items() %}
+{{ dconf_group_key }}={% if dconf_group_value is sameas true -%}
+true
+{% elif dconf_group_value is sameas false -%}
+false
+{% else -%}
+'{{ dconf_group_value }}'
+{% endif %}
+{% endfor %}
+{% endfor %}

@@ -21,17 +21,45 @@ desktop_conky_own_window_transparent: true
 desktop_conky_own_window_type: normal
 desktop_conky_update_interval: 5.0
 desktop_conky_file_systems: []
+# - /scratch
 desktop_conky_text_extra: ""
 
+# On startup, dconf consults the DCONF_PROFILE environment variable.
+desktop_dconf_profile: ""
+
+# Settings for any Gnome based desktop, includes Mate
 desktop_gnome_nfs_user_home: false
-desktop_gnome_settings: []
+# gsettings list-schemas --print-paths
+desktop_gnome_settings:
+  org/mate/desktop/lockdown:
+    disable-user-switching: false
+  org/mate/screensaver:
+    idle-activation-enabled: true
+    user-switch-enabled: true
+# Additional dconf database locks
+# Settings in `desktop_gnome_settings` are automatically locked
 desktop_gnome_setting_locks: []
 
-# Ansible playbook collection update and run every 24 hours
-desktop_sync: true
+# TODO not yet configured
+desktop_mfa_enabled: false
+
+# Amazon DCV remote desktop and application streaming
+desktop_nice_dcv_enabled: false
+desktop_nice_dcv_version: 2024.0-18131
+
+desktop_patching_enabled: true
+
+desktop_rdp_enabled: false
+
 desktop_target_default: graphical.target
 
-desktop_virtualgl_enabled: true
+# TODO not yet configured
+desktop_turbovnc_enabled: false
+
+desktop_virtualgl_enabled: false
 desktop_virtualgl_version: latest
 
+# https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
+# Additional paths for XDG configurations
+desktop_xdg_config_dirs: []
 desktop_xdg_data_dirs: []

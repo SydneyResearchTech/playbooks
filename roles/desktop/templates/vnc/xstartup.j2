@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# start up session manager wtih the DISPLAY environment variable
+#XDG_DATA_DIRS=/usr/share/gnome:/usr/local/share:/usr/share:/var/lib/snapd/desktop
+#
+unset LD_PRELOAD
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+
+XDG_DATA_DIRS=${XDG_DATA_DIRS:+$XDG_DATA_DIRS:}/opt/cvl/share
+export XDG_DATA_DIRS
+
+DISPLAY=$(vncserver -list |sed --quiet --regexp-extended '/X DISPLAY/{n; s/^[[:space:]]*:([[:digit:]]+)[[:space:]]+.*$/\1/p}')
+
+exec vglrun -d $DISPLAY +wm mate-session &
