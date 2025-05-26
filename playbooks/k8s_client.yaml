@@ -1,0 +1,14 @@
+- name: Kubernetes client configuration
+  hosts: "{{ target|default('all') }}"
+  become: true
+  vars: {}
+
+  pre_tasks: []
+
+  roles:
+    - role: restek.core.k8sclient
+
+  tasks: []
+
+  post_tasks: []
+  handlers: []

@@ -5,7 +5,6 @@
     vdi_default_target: multi-user.target
     vdi_ssh_known_hosts: []
     vdi_sync: true
-    vdi_virtualgl_version: "latest"
 
   pre_tasks:
     - name: Ansible facts
@@ -57,7 +56,8 @@
         ${color lightgrey}Department:$color Australian Imaging Service
         ${color lightgrey}Institution:$color The University of Sydney
         ${color lightgrey}Contact:$color ais.admin@sydney.edu.au
-      desktop_nice_dcv_enabled: "{{ 'Amazon' in ansible_system_vendor }}"
+      desktop_nice_dcv_enabled: true
+      # desktop_nice_dcv_enabled: "{{ 'Amazon' in ansible_system_vendor }}"
       desktop_rdp_enabled: true
       desktop_target_default: multi-user.target
       desktop_virtualgl_enabled: true

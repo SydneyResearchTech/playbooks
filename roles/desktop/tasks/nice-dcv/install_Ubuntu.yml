@@ -1,7 +1,8 @@
 # https://docs.aws.amazon.com/dcv/latest/adminguide/setting-up-installing-linux-server.html
 - name: Set facts
   ansible.builtin.set_fact:
-    nice_dcv_package_name: nice-dcv-{{ desktop_nice_dcv_version }}-ubuntu{{ ansible_distribution_version | split('.') | join }}-{{ ansible_architecture }}
+    nice_dcv_package_name: "nice-dcv-{{ desktop_nice_dcv_version }}-\
+      ubuntu{{ ansible_distribution_version | split('.') | join }}-{{ ansible_architecture }}"
 
 - name: Nice dcv pre-req.
   ansible.builtin.package:
@@ -41,7 +42,7 @@
     state: present
   with_items: "{{ nice_dcv_packages_reg.files | map(attribute='path') }}"
 
-# - name: DKMS list?
+# - name: DCV USB driver installed?
 #   ansible.builtin.command:
 #     cmd: dkms status
 #   changed_when: false

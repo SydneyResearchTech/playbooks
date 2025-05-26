@@ -43,6 +43,19 @@ desktop_gnome_setting_locks: []
 # TODO not yet configured
 desktop_mfa_enabled: false
 
+# TODO not yet fully tested, options not implemented
+# https://github.com/aws/efs-utils/tree/v1.36.0?tab=readme-ov-file#enable-mount-successfailure-notification-via-cloudwatch-log
+desktop_amazon_efs_utils_enabled: false
+desktop_amazon_efs_utils_version: "1.36.0"
+desktop_amazon_efs_utils_cloudwatch_enabled: false
+desktop_amazon_efs_utils_optimized_readahead: true
+desktop_amazon_efs_utils_fall_back_to_mount_target_ip_address: true
+desktop_amazon_efs_utils_imdsv2: true
+# https://github.com/aws/efs-utils/tree/v1.36.0?tab=readme-ov-file#use-assumerolewithwebidentity
+desktop_amazon_efs_utils_aws_web_identity_token_file: ""
+desktop_amazon_efs_utils_role_arn: ""
+desktop_amazon_efs_utils_fips_mode: false
+
 # Amazon DCV remote desktop and application streaming
 desktop_nice_dcv_enabled: false
 desktop_nice_dcv_version: 2024.0-18131

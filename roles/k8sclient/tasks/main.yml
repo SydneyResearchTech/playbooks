@@ -1,0 +1,96 @@
+---
+# tasks file for k8sclient
+- name: Set facts
+  ansible.builtin.set_fact:
+    # dpkg --print-architecture
+    dpkg_arch: >-
+      {{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' }}
+    dpkg_os: "{{ 'linux' if 'Darwin' not in ansible_os_family else 'darwin' }}"
+
+- name: Update repository cache if required
+  when: "'Debian' in ansible_os_family"
+  ansible.builtin.apt:
+    cache_valid_time: 86400
+    update_cache: true
+
+- name: Install EPEL if required
+  when: "'RHEL' in ansible_os_family"
+  ansible.builtin.include_tasks: epel/main.yml
+
+- name: Install snapd
+  when: "'Darwin' not in ansible_os_family"
+  ansible.builtin.package:
+    name:
+      - snapd
+    state: present
+
+- name: Install kubectl and helm
+  community.general.snap:
+    classic: true
+    name:
+      - kubectl
+      - helm
+    state: present
+
+- name: Configure Bash completion
+  ansible.builtin.command:
+    cmd: "{{ item }} completion bash > /etc/bash_completion.d/{{ item }}"
+    creates: /etc/bash_completion.d/{{ item }}
+  with_items:
+    - helm
+    - kubectl
+
+- name: Install calicoctl
+  ansible.builtin.get_url:
+    dest: /usr/local/bin/calicoctl-{{ k8sclient_calicoctl_version }}
+    mode: "0755"
+    url: "https://github.com/projectcalico/calico/releases/download/\
+          v{{ k8sclient_calicoctl_version }}/\
+          calicoctl-\
+          {{ 'linux' if 'Darwin' not in ansible_os_family else 'darwin' }}-\
+          {{ dpkg_arch }}"
+
+- name: Create calicoctl symlink
+  ansible.builtin.file:
+    path: /usr/local/bin/calicoctl
+    src: /usr/local/bin/calicoctl-{{ k8sclient_calicoctl_version }}
+    state: link
+
+# https://krew.sigs.k8s.io/docs/user-guide/setup/install/
+# https://github.com/kubernetes-sigs/krew/releases
+# https://github.com/int128/kubelogin
+- name: Download krew
+  ansible.builtin.get_url:
+    dest: /usr/local/src/krew-{{ dpkg_os }}_{{ dpkg_arch }}.tar.gz
+    mode: "0644"
+    url: "https://github.com/kubernetes-sigs/krew/releases/latest/download/\
+          krew-{{ dpkg_os }}_{{ dpkg_arch }}.tar.gz"
+
+- name: Unarchive krew
+  ansible.builtin.unarchive:
+    creates: /usr/local/src/krew-{{ dpkg_os }}_{{ dpkg_arch }}
+    dest: /usr/local/src
+    include:
+      - ./krew-{{ dpkg_os }}_{{ dpkg_arch }}
+    mode: "0755"
+    remote_src: true
+    src: /usr/local/src/krew-{{ dpkg_os }}_{{ dpkg_arch }}.tar.gz
+
+- name: Install krew kubectl plugin
+  ansible.builtin.copy:
+    dest: /usr/local/bin/kubectl-krew
+    mode: "0755"
+    remote_src: true
+    src: /usr/local/src/krew-{{ dpkg_os }}_{{ dpkg_arch }}
+
+- name: Configure Krew profile and install oidc-login
+  ansible.builtin.copy:
+    content: |
+      export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
+      if which kubectl >/dev/null; then
+        if ! kubectl krew list | grep -q '^oidc-login'; then
+          kubectl krew install oidc-login &>/dev/null
+        fi
+      fi
+    dest: /etc/profile.d/kubectl-krew.sh
+    mode: "0644"

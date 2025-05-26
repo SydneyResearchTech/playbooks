@@ -1,0 +1,6 @@
+---
+- name: Kubernetes client test
+  hosts: localhost
+  remote_user: root
+  roles:
+    - k8sclient

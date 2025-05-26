@@ -1,0 +1,55 @@
+# playbooks/roles/desktop/tasks/amazon_efs_utils/Debian.yml
+# https://github.com/aws/efs-utils?tab=readme-ov-file#on-other-linux-distributions
+- name: Pre-req. packages
+  ansible.builtin.package:
+    name:
+      - nfs-common
+      - libssl-dev
+      - python3
+      - python3-pip
+      - python3-venv
+      - stunnel4
+      - rustc
+      - cargo
+      - python3-botocore
+      - git
+      - binutils
+      - pkg-config
+      - gettext
+
+- name: Clone amazon efs utils source
+  ansible.builtin.git:
+    dest: /usr/local/src/efs-utils
+    repo: https://github.com/aws/efs-utils
+    update: false
+    version: v{{ desktop_amazon_efs_utils_version }}
+
+- name: Create amazon efs utils build direvtory
+  ansible.builtin.file:
+    group: ubuntu
+    mode: "0755"
+    owner: ubuntu
+    path: /usr/local/src/efs-utils/build
+    state: directory
+
+- name: Build amazon efs utils
+  become: false
+  ansible.builtin.command:
+    chdir: /usr/local/src/efs-utils
+    cmd: ./build-deb.sh
+    creates: /usr/local/src/efs-utils/build
+
+- name: Find amazon-efs-utils deb packages
+  ansible.builtin.find:
+    paths:
+      - /usr/local/src/efs-utils/build
+    patterns:
+      - '^amazon-efs-utils.*\.deb'
+    use_regex: true
+  register: amazon_efs_utils_reg
+
+- name: Install amazon efs utils
+  ansible.builtin.apt:
+    deb: "{{ item }}"
+    state: present
+  with_items: "{{ amazon_efs_utils_reg.files | map(attribute='path') }}"
