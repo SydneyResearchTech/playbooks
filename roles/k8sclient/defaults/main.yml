@@ -1,3 +1,4 @@
 ---
 # defaults file for k8sclient
 k8sclient_calicoctl_version: "3.30.0"
+k8sclient_kubelogin_version: "1.32.4"

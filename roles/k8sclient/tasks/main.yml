@@ -7,6 +7,12 @@
       {{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' }}
     dpkg_os: "{{ 'linux' if 'Darwin' not in ansible_os_family else 'darwin' }}"
 
+- name: Set facts
+  ansible.builtin.set_fact:
+    kubelogin_release: "kubelogin_\
+      {{ 'linux' if 'Darwin' not in ansible_os_family else 'darwin' }}_\
+      {{ dpkg_arch }}"
+
 - name: Update repository cache if required
   when: "'Debian' in ansible_os_family"
   ansible.builtin.apt:
@@ -56,6 +62,28 @@
     src: /usr/local/bin/calicoctl-{{ k8sclient_calicoctl_version }}
     state: link
 
+# https://github.com/int128/kubelogin
+- name: Download kubelogin release
+  ansible.builtin.get_url:
+    dest: /usr/local/src/{{ kubelogin_release }}-{{ k8sclient_kubelogin_version }}.zip
+    mode: "0644"
+    url: "https://github.com/int128/kubelogin/releases/download/\
+          v{{ k8sclient_kubelogin_version }}/{{ kubelogin_release }}.zip"
+
+- name: Install kubelogin
+  ansible.builtin.unarchive:
+    dest: /usr/local/bin
+    include: [kubelogin]
+    mode: "0755"
+    remote_src: true
+    src: /usr/local/src/{{ kubelogin_release }}-{{ k8sclient_kubelogin_version }}.zip
+
+- name: Create kubectl-oidc_login kubectl plugin symlink
+  ansible.builtin.file:
+    path: /usr/local/bin/kubectl-oidc_login
+    src: /usr/local/bin/kubelogin
+    state: link
+
 # https://krew.sigs.k8s.io/docs/user-guide/setup/install/
 # https://github.com/kubernetes-sigs/krew/releases
 # https://github.com/int128/kubelogin
@@ -87,10 +115,5 @@
   ansible.builtin.copy:
     content: |
       export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
-      if which kubectl >/dev/null; then
-        if ! kubectl krew list | grep -q '^oidc-login'; then
-          kubectl krew install oidc-login &>/dev/null
-        fi
-      fi
     dest: /etc/profile.d/kubectl-krew.sh
     mode: "0644"

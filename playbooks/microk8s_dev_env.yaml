@@ -41,6 +41,7 @@
         state: present
 
   roles:
+    - role: restek.core.k8sclient
     - role: restek.core.microk8s
       microk8s_users: ["{{ ansible_user }}"]
       microk8s_enable: [dns, hostpath-storage, metallb]
