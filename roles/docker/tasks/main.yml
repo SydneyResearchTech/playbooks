@@ -20,7 +20,10 @@
 
 - name: Set facts
   ansible.builtin.set_fact:
-    architecture: "{{ (ansible_architecture == 'aarch64') | ternary('arm64', ansible_architecture) }}"
+    architecture: >-
+      {{ ansible_architecture |
+      replace('x86_64', 'amd64') |
+      replace('aarch64', 'arm64') }}
 
 - name: Install GPG signing key
   ansible.builtin.get_url:
