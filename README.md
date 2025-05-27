@@ -54,8 +54,10 @@ ansible-pull -clocal -i,localhost \
 | aws_vrd_dev_lab | Configure a Virtual Research Desktop lab in AWS. |
 | edge_compute | Configure baseline edge compute host. |
 | [eks_create_cluster](docs/eks_create_cluster.md) | Deploy an EKS cluster. |
+| k8s_client | Configure Kubernetes client tools. |
 | microk8s_dev_env | Kubernetes cluster for development. Incorporating DNS resolution and configuration management, Certificate management, Load balancer and Ingress controller. | *WARNING; Alters the host system!* Uses include OIDC and other authentication integration work. Simulation of full disparate service. Includes full DNS provider functionality. |
 | nvidia_toolkit_install | Install/configure NVIDIA drivers, toolkit and CUDA. |
+| os_create_server_cluster | OpenStack server cluster. | Usage example Kubernetes cluster on VMs. |
 
 ## Roles
 
