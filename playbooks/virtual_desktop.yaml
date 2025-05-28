@@ -90,10 +90,7 @@
             dest: /etc/systemd
             directory_mode: "0755"
             mode: preserve
-            src: systemd
-          notify:
-            - Reload systemd
-            - Restart virtual_desktop timer
+            src: systemd/
           register: timer_reg
 
         - name: Reload systemd # noqa no-handler
@@ -113,12 +110,4 @@
         name: mate-power-manager
         state: absent
 
-  handlers:
-    - name: Reload systemd
-      ansible.builtin.systemd:
-        daemon_reload: true
-
-    - name: Restart virtual_desktop timer
-      ansible.builtin.service:
-        name: virtual_desktop.timer
-        state: restart
+  handlers: []

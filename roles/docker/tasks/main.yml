@@ -43,8 +43,11 @@
     state: present
     update_cache: true
 
+# Require Apt. Package timing issue with update_cache operation.
+# ISSUE. No package matching 'docker-ce' is available
 - name: Install
-  ansible.builtin.package:
+  ansible.builtin.apt:
+    cache_valid_time: 0
     name:
       - docker-ce
       - docker-ce-cli
@@ -52,6 +55,7 @@
       - docker-buildx-plugin
       - docker-compose-plugin
     state: present
+    update_cache: true
 
 - name: Add users to docker group
   ansible.builtin.user:
