@@ -13,9 +13,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup ansible-lint
+        run: |
+          pipx runpip ansible-lint install -r requirements.txt
+
       - name: Run ansible-lint
-        uses: ansible/ansible-lint@main
-        with:
-          args: "-v"
-          setup_python: "true"
-          requirements_file: requirements.txt
+        run: |
+          ansible-lint -v
