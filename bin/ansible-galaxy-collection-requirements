@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 COLLECTIONS=( "$@" )
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+[[ -f $SCRIPT_DIR/../requirements.txt ]] && \
+	requirements_txt="$(sed -e '/^#/d' $SCRIPT_DIR/../requirements.txt)"
 
 while read -r collection_path; do
   [[ ${#COLLECTIONS[@]} -eq 0 ]] && break
