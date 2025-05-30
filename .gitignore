@@ -1,6 +1,7 @@
 .*.swp
 /tmp/
 __pycache__/
+/.ansible/
 *-disabled
 /docs/openstack.md
 /docs/temp.md

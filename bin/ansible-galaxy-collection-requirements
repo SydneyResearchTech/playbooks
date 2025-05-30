@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+COLLECTIONS=( "$@" )
+
+while read -r collection_path; do
+  [[ ${#COLLECTIONS[@]} -eq 0 ]] && break
+  for collection in "${COLLECTIONS[@]}"; do
+    if [[ -f ${collection_path}/${collection/.//}/requirements.txt ]]; then
+	    if [[ -z $requirements_txt ]]; then
+		    requirements_txt="$(sed -e '/^#/d' ${collection_path}/${collection/.//}/requirements.txt)"
+	    else
+		    requirements_txt="${requirements_txt}"$'\n'"$(sed -e '/^#/d' ${collection_path}/${collection/.//}/requirements.txt)"
+	    fi
+    fi
+  done
+done < <(ansible-galaxy collection list --format=json | jq -r 'keys.[]')
+echo "${requirements_txt}" |sort | uniq

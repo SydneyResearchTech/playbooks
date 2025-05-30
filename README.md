@@ -1,16 +1,33 @@
 # Ansible Collection - restek.core
 
-# Ansible pull
-
 ## Install Ansible.
 
-* [https://docs.ansible.com/ansible/latest/installation_guide/installation_distros.html](https://docs.ansible.com/ansible/latest/installation_guide/installation_distros.html)
+* [Install Ansible](https://docs.ansible.com/ansible/latest/installation_guide/intro_installation.html)
+
+E.g., Install Ansible on Ubuntu 24.04 using pipx
 
 ```bash
 sudo apt update
-sudo apt install software-properties-common
-sudo add-apt-repository --yes --update ppa:ansible/ansible
-sudo apt install ansible
+sudo apt install pipx jq
+
+pipx install --include-deps ansible
+
+ansible-galaxy collection install git+https://github.com/SydneyResearchTech/playbooks.git
+
+# Install python dependancies
+pipx runpip ansible install -r $HOME/.ansible/collections/ansible_collections/restek/core/requirements.txt
+```
+
+Ansible collections more generally
+
+```bash
+# Get the paths of your installed collections
+ansible-galaxy collection list --format=json | jq -r 'keys.[]'
+
+# Add any python dependancies for the Ansible Collections you intend to use
+collection_path="FROM INSTRUCTION ABOVE"
+collection="ansible.utils"             # AS AN EXAMPLE
+pipx runpip ansible install -r "${collection_path}/${collection/.//}/requirements.txt"
 ```
 
 ## Prerequisite 
