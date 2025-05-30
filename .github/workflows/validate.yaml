@@ -15,6 +15,7 @@ jobs:
 
       - name: Setup ansible-lint
         run: |
+          pipx install ansible-lint
           pipx runpip ansible-lint install -r requirements.txt
 
       - name: Run ansible-lint
