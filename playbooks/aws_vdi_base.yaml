@@ -1,0 +1,172 @@
+---
+# playbooks/aws-vdi_base.yaml
+# ansible-playbook restek.core.aws_vdi_base -e "{stack_name: $STACK_NAME, aws_profile: $AWS_PROFILE}"
+# NB: Mandatory extra variables - aws_profile, stack_name
+- name: AWS virtual desktop infrastructure
+  hosts: localhost
+  connection: local
+  vars:
+    # aws_profile: ???
+    # stack_name: ???
+    aws_ami_name: ubuntu-noble-24.04-amd64-server-vdi-*
+    cfn_efs: efs.cfn.yml
+    cfn_launch_template: vdi-launch-template.cfn.yml
+    cfn_network: network-dual-stack.cfn.yml
+    desired_capacity: 0
+    aws_keyname: dean.taylor@sydney.edu.au
+    prod: true
+
+  pre_tasks:
+    - name: Mandatory variables?
+      ansible.builtin.assert:
+        that:
+          - aws_profile is defined
+          - stack_name is defined and stack_name is regex("^[a-z0-9][a-z0-9-]+")
+
+  tasks:
+    - name: Set configuration
+      when: prod
+      block:
+        - name: Get network configuration cfn
+          ansible.builtin.uri:
+            return_content: true
+            url: https://raw.githubusercontent.com/SydneyResearchTech/cfn-templates/refs/heads/main/{{ cfn_network }}
+          register: network_cfn_reg
+
+        - name: Get launch template cfn
+          ansible.builtin.uri:
+            return_content: true
+            url: https://raw.githubusercontent.com/SydneyResearchTech/cfn-templates/refs/heads/main/{{ cfn_launch_template }}
+          register: launch_template_cfn_reg
+
+        - name: Get EFS cfn
+          ansible.builtin.uri:
+            return_content: true
+            url: https://raw.githubusercontent.com/SydneyResearchTech/cfn-templates/refs/heads/main/{{ cfn_efs }}
+          register: efs_cfn_reg
+
+        - name: Set facts
+          ansible.builtin.set_fact:
+            template_body_network: "{{ network_cfn_reg.content }}"
+            template_body_launch_template: "{{ launch_template_cfn_reg.content }}"
+            template_body_efs: "{{ efs_cfn_reg.content }}"
+
+    - name: Set network configuration
+      when: not prod
+      block:
+        - name: Get network configuration cfn
+          ansible.builtin.slurp:
+            src: "{{ ansible_user_dir }}/cfn-templates/{{ cfn_network }}"
+          register: network_cfn_reg
+
+        - name: Get launch template cfn
+          ansible.builtin.slurp:
+            src: "{{ ansible_user_dir }}/cfn-templates/{{ cfn_launch_template }}"
+          register: launch_template_cfn_reg
+
+        - name: Get EFS cfn
+          ansible.builtin.slurp:
+            src: "{{ ansible_user_dir }}/cfn-templates/{{ cfn_efs }}"
+          register: efs_cfn_reg
+
+        - name: Set facts
+          ansible.builtin.set_fact:
+            template_body_network: "{{ network_cfn_reg.content | b64decode }}"
+            template_body_launch_template: "{{ launch_template_cfn_reg.content | b64decode }}"
+            template_body_efs: "{{ efs_cfn_reg.content | b64decode }}"
+
+    - name: Create network
+      amazon.aws.cloudformation:
+        on_create_failure: DELETE
+        profile: "{{ aws_profile }}"
+        stack_name: "{{ stack_name }}-network"
+        state: present
+        tags:
+          sydney.edu.au/resTek/ansible_play_name: "{{ ansible_play_name }}"
+          sydney.edu.au/resTek/ansible_stack_name: "{{ stack_name }}"
+        template_body: "{{ template_body_network }}"
+        template_parameters: {}
+      register: cfn_network_reg
+
+    - name: Debug network deployment
+      ansible.builtin.debug:
+        var: cfn_network_reg
+        verbosity: 1
+
+    - name: Create EFS
+      amazon.aws.cloudformation:
+        on_create_failure: DELETE
+        profile: "{{ aws_profile }}"
+        stack_name: "{{ stack_name }}-efs"
+        state: present
+        tags:
+          sydney.edu.au/resTek/ansible_play_name: "{{ ansible_play_name }}"
+          sydney.edu.au/resTek/ansible_stack_name: "{{ stack_name }}"
+        template_body: "{{ template_body_efs }}"
+        template_parameters:
+          Environment: development
+          SubnetId1: "{{ cfn_network_reg.stack_outputs.Subnet0 }}"
+          SubnetId2: "{{ cfn_network_reg.stack_outputs.Subnet1 }}"
+          SubnetId3: "{{ cfn_network_reg.stack_outputs.Subnet2 }}"
+          VpcId: "{{ cfn_network_reg.stack_outputs.VpcId }}"
+      register: cfn_efs_reg
+
+    - name: Debug EFS deployment
+      ansible.builtin.debug:
+        var: cfn_efs_reg
+        verbosity: 0
+
+    - name: Get AMIs
+      amazon.aws.ec2_ami_info:
+        filters:
+          name: "{{ aws_ami_name }}"
+        owners: ["381427642830"]
+      register: amis_reg
+
+    - name: Debug AMIs returned
+      ansible.builtin.debug:
+        var: amis_reg
+        verbosity: 1
+
+    - name: Create launch template
+      amazon.aws.cloudformation:
+        capabilities: [CAPABILITY_AUTO_EXPAND, CAPABILITY_IAM, CAPABILITY_NAMED_IAM]
+        on_create_failure: DELETE
+        profile: "{{ aws_profile }}"
+        stack_name: "{{ stack_name }}-{{ cfn_launch_template | split('.') | first }}"
+        state: present
+        tags:
+          sydney.edu.au/resTek/ansible_play_name: "{{ ansible_play_name }}"
+          sydney.edu.au/resTek/ansible_stack_name: "{{ stack_name }}"
+        template_body: "{{ template_body_launch_template }}"
+        template_parameters:
+          Billing: xnat
+          CreatedBy: "ais.admin@sydney.edu.au"
+          ImageId: "{{ amis_reg.images[-1].image_id }}"
+          KeyName: "{{ aws_keyname }}"
+          SubnetId: "{{ cfn_network_reg.stack_outputs.Subnet0 }}"
+          VpcId: "{{ cfn_network_reg.stack_outputs.VpcId }}"
+      register: cfn_launch_template_reg
+
+    - name: Debug launch template deployment
+      ansible.builtin.debug:
+        var: cfn_launch_template_reg
+        verbosity: 1
+
+    - name: Create autoscaling group
+      amazon.aws.autoscaling_group:
+        desired_capacity: "{{ desired_capacity }}"
+        launch_template:
+          launch_template_name: "{{ stack_name }}-{{ cfn_launch_template | split('.') | first }}"
+          version: "{{ cfn_launch_template_reg.stack_outputs.LatestVersionNumber }}"
+        max_size: 24
+        min_size: 0
+        mixed_instances_policy:
+          instance_distribution:
+            spot_allocation_strategy: lowest-price
+        name: "{{ stack_name }}-asg"
+        profile: "{{ aws_profile }}"
+        state: present
+        tags:
+          - sydney.edu.au/resTek/ansible_play_name: "{{ ansible_play_name }}"
+          - sydney.edu.au/resTek/ansible_stack_name: "{{ stack_name }}"
