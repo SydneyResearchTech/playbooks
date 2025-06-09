@@ -28,6 +28,7 @@
   ansible.builtin.package:
     name:
       - snapd
+      - unzip
     state: present
 
 - name: Install kubectl and helm
@@ -39,7 +40,7 @@
     state: present
 
 - name: Configure Bash completion
-  ansible.builtin.command:
+  ansible.builtin.shell:
     cmd: "{{ item }} completion bash > /etc/bash_completion.d/{{ item }}"
     creates: /etc/bash_completion.d/{{ item }}
   with_items:

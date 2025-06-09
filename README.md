@@ -11,6 +11,7 @@ sudo apt update
 sudo apt install pipx jq
 
 pipx install --include-deps ansible
+pipx inject --include-apps ansible ansible-lint
 
 ansible-galaxy collection install git+https://github.com/SydneyResearchTech/playbooks.git
 

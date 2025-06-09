@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Generate a requirements.txt python module dependancy file. The file includes both local and
+# dependant collection requirements.
 COLLECTIONS=( "$@" )
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
