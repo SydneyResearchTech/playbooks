@@ -1,5 +1,23 @@
 # Ansible Collection - restek.core
 
+## Using the Collection from a controlling host or jump host
+
+This *Quick start guide* assumes you have `ansible` installed using `pipx`.
+
+```bash
+# Install the University of Sydneys, Research Technology Ansible collection.
+ansible-galaxy collection install --force "git+https://github.com/SydneyResearchTech/playbooks.git"
+
+# Install any python dependancies.
+pipx runpip ansible install -r $HOME/.ansible/collections/ansible_collections/restek/core/requirements.txt
+
+# Run one of the Ansible playbooks from the collection.
+ansible-playbook -c local -e target=localhost restek.core.k8s_client
+```
+
+The above playbook installs many of the Kubernetes client tools on the local system. Many of with will appear under the
+`ubuntu` default user. You can alter the default settings on the command line or by using an Ansible inventory.
+
 ## Install Ansible.
 
 * [Install Ansible](https://docs.ansible.com/ansible/latest/installation_guide/intro_installation.html)
