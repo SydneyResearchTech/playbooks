@@ -1,0 +1,6 @@
+# roles/desktop/tasks/authd/Ubuntu.yml
+# https://documentation.ubuntu.com/authd/latest/howto/install-authd/
+# sudo add-apt-repository ppa:ubuntu-enterprise-desktop/authd
+# sudo apt install authd gnome-shell yaru-theme-gnome-shell
+# sudo snap install authd-google
+# sudo snap install authd-msentraid

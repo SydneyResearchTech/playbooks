@@ -1,0 +1,2 @@
+playbooks/files/flux/template/kustomization.yaml yaml[indentation]
+playbooks/files/flux/template/kustomizeconfig.yaml yaml[indentation]

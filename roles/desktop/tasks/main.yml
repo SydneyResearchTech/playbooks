@@ -7,11 +7,21 @@
     update_cache: true
 
 - name: NVIDIA drivers and CUDA
-  ansible.builtin.include_tasks: nvidia/Ubuntu.yml
+  ansible.builtin.include_tasks:
+    file: "{{ item }}"
+  with_first_found:
+    - files:
+        - nvidia/{{ ansible_distribution }}.yml
+      skip: true
 
 - name: VirtualGL
   when: desktop_virtualgl_enabled
-  ansible.builtin.include_tasks: virtualgl/Debian.yml
+  ansible.builtin.include_tasks:
+    file: "{{ item }}"
+  with_first_found:
+    - files:
+        - virtualgl/{{ ansible_os_family }}.yml
+      skip: true
 
 # https://snapcraft.io/docs/installing-snapd
 - name: Install
@@ -25,12 +35,21 @@
       - libqrencode4
       - lmod
       - make
+      - podman
       - ubuntu-mate-desktop
       - s3fs
       - snapd
       - vlc
       - xrdp
     state: present
+
+- name: Authd
+  ansible.builtin.include_tasks:
+    file: "{{ item }}"
+  with_first_found:
+    - files:
+        - authd/{{ ansible_distribution }}.yml
+      skip: true
 
 - name: Enable RDP service
   ansible.builtin.service:
@@ -53,19 +72,35 @@
     - lxd
 
 - name: Unattended Upgrades
-  ansible.builtin.include_tasks: patching/Ubuntu.yml
+  ansible.builtin.include_tasks:
+    file: "{{ item }}"
+  with_first_found:
+    - files:
+        - patching/{{ ansible_distribution }}.yml
+      skip: true
 
 - name: Gconf GNOME
   ansible.builtin.include_tasks: gnome/configure.yml
 
 - name: Conky
-  ansible.builtin.include_tasks: conky/Debian.yml
+  ansible.builtin.include_tasks:
+    file: "{{ item }}"
+  with_first_found:
+    - files:
+        - conky/{{ ansible_os_family }}.yml
+      skip: true
+
 - name: Configure conky
   ansible.builtin.include_tasks: conky/configure.yml
 
 - name: Install NICE DCV remote desktop
   when: desktop_nice_dcv_enabled
-  ansible.builtin.include_tasks: nice-dcv/install_Ubuntu.yml
+  ansible.builtin.include_tasks:
+    file: "{{ item }}"
+  with_first_found:
+    - files:
+        - nice-dcv/{{ ansible_distribution }}.yml
+      skip: true
 
 - name: Set default target
   ansible.builtin.file:
