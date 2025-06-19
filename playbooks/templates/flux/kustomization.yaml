@@ -6,9 +6,9 @@ configurations:
 - kustomizeconfig.yaml
 
 configMapGenerator: []
-#- name: cert-manager-base
+#- name: APPLICATION
 #  namespace: flux-system
 #  files:
-#  - values.yaml=cert-manager.values.yaml
+#  - values.yaml=APPLICATION.values.yaml
 
 resources: []

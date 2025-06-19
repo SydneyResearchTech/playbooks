@@ -5,23 +5,26 @@ metadata:
   name: infrastructure-controllers
   namespace: flux-system
 spec:
-  dependsOn:
-  - name: infrastructure-secrets
-  interval: 1m0s
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-age
+  interval: 10m0s
   sourceRef:
     kind: GitRepository
     name: flux-system
 {% if calico_enabled %}
   path: ./infrastructure/base-aws/controller
 {% else %}
-  path: ./infrastructure/base-aws-vpc/controller
+  path: ./infrastructure/aws-vpc/controller
 {% endif %}
   prune: true
   postBuild:
     substitute:
       cluster_name: {{ cluster_name }}
-      ingress_healthcheck_port: "32741"
       region: {{ region }}
+      aws_lb_ip_address_type: dualstack
+      ipFamilies: IPv6
   patches:
     []
 ---
@@ -33,14 +36,14 @@ metadata:
 spec:
   dependsOn:
   - name: infrastructure-controllers
-  interval: 1m0s
+  interval: 10m0s
   sourceRef:
     kind: GitRepository
     name: flux-system
 {% if calico_enabled %}
   path: ./infrastructure/base-aws/config
 {% else %}
-  path: ./infrastructure/base-aws-vpc/config
+  path: ./infrastructure/aws-vpc/config
 {% endif %}
   prune: true
   components: []
@@ -48,7 +51,11 @@ spec:
   postBuild:
     substitute:
       cluster_name: {{ cluster_name }}
+      region: {{ region }}
       efs_file_system_id: {{ efs_file_system_id }}
+    {% if external_dns_zone %}
+      external_dns_zone: {{ external_dns_zone }}
+    {% endif %}
       # uuid: 000000000000
       # rds_vpc_security_group_id: sg-00000000000000000
   patches: []

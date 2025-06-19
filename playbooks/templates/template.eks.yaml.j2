@@ -51,6 +51,14 @@ iam:
       attachPolicyARNs:
         - arn:aws:iam::aws:policy/AmazonRDSFullAccess
       roleOnly: false
+  {% if external_dns_zone %}
+    - metadata:
+        name: external-dns
+        namespace: external-dns
+      attachPolicyARNs:
+        - {{ route53_policy_arn }}
+      roleOnly: false
+  {% endif %}
 {% endif %}
   withOIDC: true
 
@@ -86,6 +94,7 @@ secretsEncryption:
   keyARN: "{{ key_arn }}"
 
 {% if not bootstrap %}
+{% if flux_branch %}
 gitops:
   flux:
     gitProvider: "github"
@@ -93,8 +102,10 @@ gitops:
       owner: SydneyResearchTech
       path: clusters/{{ cluster_name }}
       repository: gitops-flux
-      branch: main
+      branch: {{ flux_branch }}
 
+{% endif %}
+{% if false %}
 # https://eksctl.io/usage/eksctl-karpenter/
 # https://github.com/aws/karpenter-provider-aws/releases
 # NB: Moved to Ansible and Flux (GitOps) to automate updates
@@ -104,9 +115,15 @@ gitops:
 #  # defaultProfile: "eksctl-KarpenterNodeInstanceProfile-restek-dev"
 #  withSpotInterruptionQueue: true
 
+# Amazon EKS will no longer publish EKS-optimized Amazon Linux 2 (AL2) AMIs after November 26th, 2025. Additionally,
+# Kubernetes version 1.32 is the last version for which Amazon EKS will release AL2 AMIs. From version 1.33 onwards,
+# Amazon EKS will continue to release AL2023 and Bottlerocket based AMIs. The default AMI family when creating clusters
+# and nodegroups in Eksctl will be changed to AL2023 in the future.
+# amiFamily: AmazonLinux2023, AmazonLinux2, UbuntuPro2404, Ubuntu2404, UbuntuPro2204, Ubuntu2204, UbuntuPro2004, Ubuntu2004, Bottlerocket, WindowsServer2019CoreContainer, WindowsServer2019FullContainer, WindowsServer2022CoreContainer, WindowsServer2022FullContainer
+{% endif %}
 managedNodeGroups:
   - name: m7g-4xlarge
-    amiFamily: AmazonLinux2
+    amiFamily: AmazonLinux2023
     disableIMDSv1: true
     disablePodIMDS: false
     instanceType: m7g.4xlarge

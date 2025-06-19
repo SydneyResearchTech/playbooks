@@ -1,8 +1,6 @@
 ---
 # restek.core.eks_create_cluster collection playbook
 # ansible-playbook -e 'cluster_name=restek-dev' restek.core.eks_create_cluster
-# python3 -m pip install kubernetes
-#
 - name: AWS EKS create cluster
   hosts: localhost
   become: false
@@ -21,12 +19,16 @@
     calico_version: "3.29.1"
     clobber: false
     cluster_name: ""
+    contact: "ais.admin@sydney.edu.au"
     eksctl_create: false
+    external_dns_zone: ""
+    flux_branch: main
     flux_dir: "{{ (lookup('ansible.builtin.env', 'HOME'), 'flux') | path_join }}"
     ipv6: true
     karpenter_namespace: kube-system
-    karpenter_version: "1.1.1"
-    kubernetes_version: "1.31"
+    karpenter_version: "1.3.4"
+    kubernetes_version: "1.33"
+    organisation: Research Technology
     vpc_cidr: "192.168.0.0/16"
     vpc_id: ""
 
@@ -36,17 +38,40 @@
         that:
           - cluster_name is regex("^[a-z0-9][a-z0-9-]+")
 
-    - name: Flux directory exists?
-      ansible.builtin.stat:
-        path: "{{ flux_dir }}"
-      register: flux_dir_stat
-    - name: Fail if flux directory does not exist
+    - name: Flux sanity check
       when:
-        - not flux_dir_stat.stat.exists
-      ansible.builtin.fail:
-        msg: |
-          Run git clone git@github.com:SydneyResearchTech/gitops-flux.git {{ flux_dir }}
-          OR provide the flux_dir parameter with the correct path
+        - flux_branch
+      block:
+        - name: Flux directory?
+          ansible.builtin.stat:
+            path: "{{ flux_dir }}"
+          register: flux_dir_stat
+
+        - name: Flux directory exists
+          when:
+            - not flux_dir_stat.stat.exists
+          ansible.builtin.fail:
+            msg:
+              - git clone git@github.com:SydneyResearchTech/gitops-flux.git {{ flux_dir }}
+              - OR provide the `flux_dir` parameter with the correct path
+
+        - name: Flux current git branch? # noqa: command-instead-of-module
+          ansible.builtin.command:
+            cmd: git -C {{ flux_dir }} rev-parse --abbrev-ref HEAD
+          register: git_current_branch_reg
+          changed_when: false
+
+        - name: Flux source is on the correct git branch
+          when:
+            - git_current_branch_reg.stdout != flux_branch
+          ansible.builtin.fail:
+            msg:
+              - git -C {{ flux_dir }} fetch
+              - git -C {{ flux_dir }} switch {{ flux_branch }}
+              - OR if remote branch does not exist
+              - git -C {{ flux_dir }} checkout -b {{ flux_branch }}
+              - git -C {{ flux_dir }} push --set-upstream origin {{ flux_branch }}
+              - OR Disable Flux configuration by adding `flux_dir=""` to your extra_values
 
   roles: []
 
@@ -55,14 +80,21 @@
       ansible.builtin.command:
         cmd: aws configure get region --profile {{ aws_profile }}
       changed_when: false
-      register: region_output
+      register: region_reg
 
     - name: Get AWS account ID
       ansible.builtin.command:
         cmd: aws sts get-caller-identity --profile {{ aws_profile }} --output text --query 'Account'
       changed_when: false
-      register: aws_account_id_output
-    # - ansible.builtin.debug: {var: aws_account_id_output}
+      register: aws_account_id_reg
+
+    - name: Set tagging fact
+      ansible.builtin.set_fact:
+        aws_tags:
+          alpha.eksctl.io/cluster-name: "{{ cluster_name }}"
+          eksctl.cluster.k8s.io/v1alpha1/cluster-name: "{{ cluster_name }}"
+          sydney.edu.au/ou: "{{ organisation }}"
+          sydney.edu.au/resTek/contact: "{{ contact }}"
 
     - name: AWS KMS create key
       amazon.aws.kms_key:
@@ -72,20 +104,70 @@
         key_usage: ENCRYPT_DECRYPT
         profile: "{{ aws_profile }}"
         state: present
-        tags:
-          alpha.eksctl.io/cluster-name: "{{ cluster_name }}"
-          eksctl.cluster.k8s.io/v1alpha1/cluster-name: "{{ cluster_name }}"
-          sydney.edu.au/ou: Research Technology
-          sydney.edu.au/resTek/contact: ais.admin@sydney.edu.au
-      register: kms_key_output
-    # - ansible.builtin.debug: {var: kms_key_output}
+        tags: "{{ aws_tags }}"
+      register: kms_key_reg
+
+    - name: Route53
+      when:
+        - external_dns_zone
+      block:
+        - name: Route53 hosted zone
+          amazon.aws.route53_zone:
+            comment: "EKS cluster {{ cluster_name }} external-dns zone"
+            profile: "{{ aws_profile }}"
+            state: present
+            tags: "{{ aws_tags }}"
+            zone: "{{ external_dns_zone }}"
+          register: route53_zone_reg
+        # - ansible.builtin.debug: {var: route53_zone_reg}
+        # - ansible.builtin.debug: {msg: "{{ route53_zone_reg.zone_id }}"}
+
+        # https://github.com/kubernetes-sigs/external-dns/blob/master/docs/tutorials/aws.md
+        # aws iam create-policy --policy-name "AllowExternalDNSUpdates" --policy-document file://policy.json
+        - name: Route53 policy
+          amazon.aws.iam_managed_policy:
+            policy_name: eks-{{ cluster_name }}-AllowExternalDNSUpdates
+            policy: |
+              {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": ["route53:ChangeResourceRecordSets"],
+                    "Resource": ["arn:aws:route53:::hostedzone/{{ route53_zone_reg.zone_id }}"]
+                  },
+                  {
+                    "Effect": "Allow",
+                    "Action": [
+                      "route53:ListHostedZones",
+                      "route53:ListResourceRecordSets",
+                      "route53:ListTagsForResources"
+                    ],
+                    "Resource": ["*"]
+                  }
+                ]
+              }
+            profile: "{{ aws_profile }}"
+            state: present
+          register: route53_policy_reg
+        # - ansible.builtin.debug: {var: route53_policy_reg}
 
     - name: Set facts
       ansible.builtin.set_fact:
-        account_id: "{{ aws_account_id_output.stdout }}"
-        # flux_dir: "{{ (lookup('ansible.builtin.env', 'HOME'), 'flux') | path_join }}"
-        key_arn: "{{ kms_key_output.key_arn }}"
-        region: "{{ region_output.stdout }}"
+        account_id: "{{ aws_account_id_reg.stdout }}"
+        key_arn: "{{ kms_key_reg.key_arn }}"
+        region: "{{ region_reg.stdout }}"
+        route53_policy_arn: "{{ route53_policy_reg.policy.arn | default('') }}"
+    # - ansible.builtin.fail: {msg: "{{ route53_policy_arn }}"}
+
+    - name: DEBUG operational variables
+      ansible.builtin.debug:
+        msg:
+          - account_id is {{ account_id }}
+          - aws region is {{ region }}
+          - key_arn is {{ key_arn }}
+          - local flux directory path is {{ flux_dir }}
+        verbosity: 1
 
     # https://karpenter.sh/v0.37/getting-started/getting-started-with-karpenter/
     - name: Get karpenter provider cfn
@@ -95,32 +177,21 @@
         url: "https://raw.githubusercontent.com/aws/karpenter-provider-aws\
               /v{{ karpenter_version }}\
               /website/content/en/preview/getting-started/getting-started-with-karpenter/cloudformation.yaml"
-      register: karpenter_cfn_output
+      register: karpenter_cfn_reg
 
     - name: Karpenter cloudformation deploy
+      when:
+        - karpenter_cfn_reg.status == 200
       amazon.aws.cloudformation:
         capabilities: ["CAPABILITY_NAMED_IAM"]
         on_create_failure: DELETE
         profile: "{{ aws_profile }}"
         stack_name: Karpenter-{{ cluster_name }}
         state: present
-        tags:
-          alpha.eksctl.io/cluster-name: "{{ cluster_name }}"
-          eksctl.cluster.k8s.io/v1alpha1/cluster-name: "{{ cluster_name }}"
-          sydney.edu.au/ou: Research Technology
-          sydney.edu.au/resTek/createBy: dean.taylor@sydney.edu.au
-        template_body: "{{ karpenter_cfn_output.content }}"
+        tags: "{{ aws_tags }}"
+        template_body: "{{ karpenter_cfn_reg.content }}"
         template_parameters:
           ClusterName: "{{ cluster_name }}"
-      when:
-        - karpenter_cfn_output.status == 200
-
-    # - name: Clone flux repository
-    #   ansible.builtin.git:
-    #     clone: true
-    #     dest: "{{ flux_dir }}"
-    #     repo: "git@github.com:SydneyResearchTech/gitops-flux.git"
-    #     update: true
 
     - name: Create EKS cluster bootstrap for Calico CNI
       when:
@@ -143,6 +214,8 @@
         src: template.eks.yaml.j2
       vars:
         bootstrap: false
+      notify:
+        - Update eks cluster
 
     - name: Get EKS Cluster Security Group
       amazon.aws.ec2_security_group_info:
@@ -156,8 +229,8 @@
             value: "{{ cluster_name }}"
           - key: "tag:kubernetes.io/cluster/{{ cluster_name }}"
             value: owned
-      register: cluster_sg_output
-    # - ansible.builtin.debug: {var: cluster_sg_output }
+      register: cluster_sg_reg
+    # - ansible.builtin.debug: {var: cluster_sg_reg }
 
     - name: Get EKS cluster subnets
       amazon.aws.ec2_vpc_subnet_info:
@@ -165,13 +238,13 @@
           "tag:eksctl.cluster.k8s.io/v1alpha1/cluster-name": "{{ cluster_name }}"
           "tag:kubernetes.io/role/elb": 1
         profile: "{{ aws_profile }}"
-      register: cluster_sn_output
-    # - ansible.builtin.debug: {var: cluster_sn_output}
+      register: cluster_sn_reg
+    # - ansible.builtin.debug: {var: cluster_sn_reg}
 
     - name: Post EKS cluster creation
       when:
-        - cluster_sg_output.security_groups | length > 0
-        - cluster_sn_output.subnets | length > 0
+        - cluster_sg_reg.security_groups | length > 0
+        - cluster_sn_reg.subnets | length > 0
       block:
         - name: Get kubectl config
           ansible.builtin.command:
@@ -179,12 +252,12 @@
               aws eks update-kubeconfig --name {{ cluster_name }}
               --profile {{ aws_profile }}
               --kubeconfig /dev/null --dry-run
-          register: kubeconfig_output
+          register: kubeconfig_reg
           changed_when: false
 
         - name: Set Facts
           ansible.builtin.set_fact:
-            kubeconfig: "{{ kubeconfig_output.stdout | from_yaml }}"
+            kubeconfig: "{{ kubeconfig_reg.stdout | from_yaml }}"
 
         - name: Calico installation
           when:
@@ -263,9 +336,9 @@
                 - 0 > 1
               amazon.aws.ec2_security_group:
                 profile: "{{ aws_profile }}"
-                description: "{{ cluster_sg_output.security_groups.0.description }}"
-                name: "{{ cluster_sg_output.security_groups.0.group_name }}"
-                group_id: "{{ cluster_sg_output.security_groups.0.group_id }}"
+                description: "{{ cluster_sg_reg.security_groups.0.description }}"
+                name: "{{ cluster_sg_reg.security_groups.0.group_name }}"
+                group_id: "{{ cluster_sg_reg.security_groups.0.group_id }}"
                 purge_rules: false
                 rules:
                   - cidr_ip: "{{ vpc_cidr }}"
@@ -280,147 +353,184 @@
                     rule_desc: ANSIBLE WORKAROUND ISSUE LB controller
                 state: present
 
-
             - name: Enable FluxCD
               ansible.builtin.command:
                 cmd: eksctl enable flux -f {{ flux_dir }}/clusters/{{ cluster_name }}.eks.yaml
               changed_when: true
-
-        - name: Flux directories
-          ansible.builtin.file:
-            mode: "0755"
-            path: "{{ flux_dir }}/{{ item }}"
-            state: directory
-          with_items:
-            - infrastructure/overlays
-            - infrastructure/overlays/{{ cluster_name }}
-            - infrastructure/overlays/{{ cluster_name }}/controller
-            - infrastructure/overlays/{{ cluster_name }}/config
-            - apps/overlays/{{ cluster_name }}
-
-        - name: Secret encryption?
-          ansible.builtin.stat:
-            path: "{{ flux_dir }}/infrastructure/{{ cluster_name }}/.sops.yaml"
-          register: sops_output
-
-        - name: Secret configuration
-          when:
-            - not sops_output.stat.exists
-          block:
-            - name: Generate age key
-              ansible.builtin.command:
-                cmd: age-keygen
-              register: agekey_output
-              changed_when: false
-
-            - name: Age secret
-              kubernetes.core.k8s:
-                apply: true
-                kubeconfig: "{{ kubeconfig }}"
-                resource_definition:
-                  apiVersion: v1
-                  kind: Secret
-                  metadata:
-                    name: sops-age
-                    namespace: flux-system
-                  data:
-                    age.agekey: "{{ agekey_output.stdout | b64encode }}"
-                state: present
-
-            - name: Set Facts
-              ansible.builtin.set_fact:
-                agekey_public: >-
-                  {{ agekey_output.stdout |
-                  regex_search('public key: (.*)$', '\\1', multiline=True) | first }}
-
-            - name: SOPS configuration
-              ansible.builtin.copy:
-                content: |
-                  creation_rules:
-                  - path_regex: .*.ya?ml
-                    encrypted_regex: '^(data|stringData)$'
-                    age: >-
-                      {{ agekey_public }}
-                dest: "{{ flux_dir }}/{{ item }}"
-                mode: "0644"
-              with_items:
-                - infrastructure/{{ cluster_name }}/.sops.yaml
-                - apps/{{ cluster_name }}/.sops.yaml
+              notify:
+                - Flux git pull
 
         - name: Get EFS cfn
           ansible.builtin.uri:
             return_content: true
             url: https://raw.githubusercontent.com/SydneyResearchTech/cfn-templates/main/efs.cfn.yml
-          register: efs_cfn_output
+          register: efs_cfn_reg
+
+        - name: DEBUG EFS deployment
+          ansible.builtin.debug:
+            msg: >-
+              aws cloudformation create-stack
+              --profile {{ aws_profile }}
+              --template-body=file:///$HOME/cfn-templates/efs.cfn.yml
+              --tags='{{ aws_tags | to_json }}'
+              --stack-name=eks-{{ cluster_name }}-efs-csi
+              --parameters
+              ParameterKey=VpcId,ParameterValue={{ cluster_sg_reg.security_groups.0.vpc_id }}
+              ParameterKey=SecurityGroupId,ParameterValue={{ cluster_sg_reg.security_groups.0.group_id }}
+              ParameterKey=SubnetId1,ParameterValue={{ cluster_sn_reg.subnets.0.id }}
+              ParameterKey=SubnetId2,ParameterValue={{ cluster_sn_reg.subnets.1.id }}
+              ParameterKey=SubnetId3,ParameterValue={{ cluster_sn_reg.subnets.2.id }}
+            verbosity: 1
 
         - name: EFS deployment
           when:
-            - efs_cfn_output.status == 200
+            - efs_cfn_reg.status == 200
           amazon.aws.cloudformation:
             on_create_failure: DELETE
             profile: "{{ aws_profile }}"
             stack_name: eks-{{ cluster_name }}-efs-csi
             state: present
-            tags:
-              alpha.eksctl.io/cluster-name: "{{ cluster_name }}"
-              eksctl.cluster.k8s.io/v1alpha1/cluster-name: "{{ cluster_name }}"
-              sydney.edu.au/ou: Research Technology
-              sydney.edu.au/resTek/createBy: dean.taylor@sydney.edu.au
-            template_body: "{{ efs_cfn_output.content }}"
+            tags: "{{ aws_tags }}"
+            template_body: "{{ efs_cfn_reg.content }}"
             template_parameters:
-              VpcId: "{{ cluster_sg_output.security_groups.0.vpc_id }}"
-              SecurityGroupId: "{{ cluster_sg_output.security_groups.0.group_id }}"
-              SubnetId1: "{{ cluster_sn_output.subnets.0.id }}"
-              SubnetId2: "{{ cluster_sn_output.subnets.1.id }}"
-              SubnetId3: "{{ cluster_sn_output.subnets.2.id }}"
-          register: efs_output
-        # - ansible.builtin.debug: {var: efs_output}
+              VpcId: "{{ cluster_sg_reg.security_groups.0.vpc_id }}"
+              SecurityGroupId: "{{ cluster_sg_reg.security_groups.0.group_id }}"
+              SubnetId1: "{{ cluster_sn_reg.subnets.0.id }}"
+              SubnetId2: "{{ cluster_sn_reg.subnets.1.id }}"
+              SubnetId3: "{{ cluster_sn_reg.subnets.2.id }}"
+          register: efs_reg
+        # - ansible.builtin.debug: {var: efs_reg}
 
         - name: Set Facts
           ansible.builtin.set_fact:
-            efs_file_system_id: "{{ efs_output.stack_outputs.FileSystemId }}"
+            efs_file_system_id: "{{ efs_reg.stack_outputs.FileSystemId }}"
 
-        - name: Flux cluster secrets
-          when:
-            - 0 > 1
-          ansible.builtin.template:
-            backup: true
-            dest: "{{ flux_dir }}/clusters/{{ cluster_name }}/secrets.yaml"
-            force: "{{ clobber }}"
-            lstrip_blocks: true
-            mode: "0644"
-            src: flux/clusters/secrets.yaml.j2
+        - name: Flux setup
+            - flux_branch
+          block:
+            - name: Flux directories
+              ansible.builtin.file:
+                mode: "0755"
+                path: "{{ flux_dir }}/{{ item }}"
+                state: directory
+              with_items:
+                - apps/overlays/
+                - apps/overlays/{{ cluster_name }}
+                - clusters/{{ cluster_name }}
+                - infrastructure/overlays
+                - infrastructure/overlays/{{ cluster_name }}
+                - infrastructure/overlays/{{ cluster_name }}/controller
+                - infrastructure/overlays/{{ cluster_name }}/config
 
-        - name: Flux cluster infrastructure
-          ansible.builtin.template:
-            backup: true
-            dest: "{{ flux_dir }}/clusters/{{ cluster_name }}/infrastructure.yaml"
-            force: "{{ clobber }}"
-            lstrip_blocks: true
-            mode: "0644"
-            src: flux/clusters/infrastructure.yaml.j2
+            - name: Flux template
+              ansible.builtin.copy:
+                dest: "{{ flux_dir }}/{{ item }}"
+                force: false
+                mode: "0644"
+                src: flux/template/
+              with_items:
+                - infrastructure/overlays/{{ cluster_name }}/controller
+                - infrastructure/overlays/{{ cluster_name }}/config
 
-        - name: Flux cluster applications
-          when:
-            - 0 > 1
-          ansible.builtin.template:
-            backup: true
-            dest: "{{ flux_dir }}/clusters/{{ cluster_name }}/apps.yaml"
-            force: "{{ clobber }}"
-            lstrip_blocks: true
-            mode: "0644"
-            src: flux/clusters/apps.yaml.j2
+            - name: Secret encryption?
+              ansible.builtin.stat:
+                path: "{{ flux_dir }}/infrastructure/overlays/{{ cluster_name }}/.sops.yaml"
+              register: sops_reg
 
-        - name: Flux cluster notifications
-          when:
-            - 0 > 1
-          ansible.builtin.template:
-            backup: true
-            dest: "{{ flux_dir }}/clusters/{{ cluster_name }}/notification.yaml"
-            force: "{{ clobber }}"
-            lstrip_blocks: true
-            mode: "0644"
-            src: flux/clusters/notification.yaml.j2
+            - name: Secret configuration
+              when:
+                - not sops_reg.stat.exists
+              block:
+                - name: Generate age key
+                  ansible.builtin.command:
+                    cmd: age-keygen
+                  register: agekey_reg
+                  changed_when: false
+                # - ansible.builtin.debug: {var: agekey_reg}
 
-  post_tasks: []
-  handlers: []
+                - name: Age secret
+                  kubernetes.core.k8s:
+                    apply: true
+                    kubeconfig: "{{ kubeconfig }}"
+                    resource_definition:
+                      apiVersion: v1
+                      kind: Secret
+                      metadata:
+                        name: sops-age
+                        namespace: flux-system
+                      data:
+                        age.agekey: "{{ agekey_reg.stdout | b64encode }}"
+                    state: present
+
+                - name: Set Facts
+                  ansible.builtin.set_fact:
+                    agekey_public: "{{ agekey_reg.stdout_lines[1] | regex_search('^.*(age.*)$', '\\1') | first }}"
+
+                - name: SOPS configuration
+                  ansible.builtin.copy:
+                    content: |
+                      creation_rules:
+                      - path_regex: .*.ya?ml
+                        encrypted_regex: '^(data|stringData)$'
+                        age: >-
+                          {{ agekey_public }}
+                    dest: "{{ flux_dir }}/{{ item }}"
+                    mode: "0644"
+                  with_items:
+                    - infrastructure/overlays/{{ cluster_name }}/.sops.yaml
+                    - apps/overlays/{{ cluster_name }}/.sops.yaml
+                  notify:
+                    - Git push flux changes
+
+            - name: Flux cluster configuration
+              ansible.builtin.template:
+                backup: true
+                dest: "{{ flux_dir }}/clusters/{{ cluster_name }}/{{ item }}.yaml"
+                force: "{{ clobber }}"
+                lstrip_blocks: true
+                mode: "0644"
+                src: flux/clusters/{{ item }}.yaml.j2
+              with_items:
+                - infrastructure
+              #  - secrets
+              #  - apps
+              #  - notification
+              notify:
+                - Git push flux changes
+
+  post_tasks:
+    - name: Details
+      ansible.builtin.debug:
+        msg:
+          - aws --profile={{ aws_profile }} route53 get-hosted-zone --id={{ route53_zone_reg.zone_id }}
+
+  handlers:
+    - name: Update eks cluster
+      ansible.builtin.debug:
+        msg:
+          - ACTION REQUIRED
+          - Review {{ flux_dir }}/clusters/{{ cluster_name }}.eks.yaml
+          - Run `eksctl create cluster -f {{ flux_dir }}/clusters/{{ cluster_name }}.eks.yaml`
+          - OR the appropriate `eksctl` command to initiate change.
+          - Re-run Ansible playbook once EKS changes have applied if required.
+
+    - name: Git push flux changes
+      ansible.builtin.debug:
+        msg:
+          - ACTION REQUIRED
+          - Review changes made to {{ flux_dir }}.
+          - Run `git -C {{ flux_dir }} add clusters/{{ cluster_name }}`
+          - Run `git -C {{ flux_dir }} add clusters/{{ cluster_name }}.*`
+          - Run `git -C {{ flux_dir }} add infrastructure/overlays/{{ cluster_name }}`
+          - Run `git -C {{ flux_dir }} add apps/overlays/{{ cluster_name }}`
+          - Run `git -C {{ flux_dir }} commit -m 'Ansible playbook {{ ansible_play_name }} alterations`
+          - Run `git -C {{ flux_dir }} push`
+
+    - name: Flux git pull
+      ansible.builtin.debug:
+        msg:
+          - ACTION REQUIRED
+          - Pull entries from the Flux registration process
+          - Run `git -C {{ flux_dir }} stash`
+          - Run `git -C {{ flux_dir }} pull`
+          - Run `git -C {{ flux_dir }} stash pop`
