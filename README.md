@@ -103,7 +103,7 @@ ansible-pull -clocal -i,localhost \
 | desktop   | VDI Virtual desktop with multiple container runtimes and base toolings | Uses include development, workshops |
 | docker    | Docker container runtime and tools |
 | k8sclient | Kubernetes client tools and plugins |
-| microk8s  | Install and configure MicroK8s on a single node. |
+| [microk8s](docs/microk8s.md) | Install and configure MicroK8s on a single node. |
 
 ## Cloud-init example
 
