@@ -1,0 +1,23 @@
+# ansible/roles/network/tasks/tayga/main.yml
+- name: Install tayga
+  ansible.builtin.package:
+    name:
+      - tayga
+    state: present
+
+- name: Configure tayga
+  ansible.builtin.template:
+    backup: true
+    dest: /etc/tayga.conf
+    group: root
+    mode: "0644"
+    owner: root
+    src: etc/tayga.conf.j2
+  notify:
+    - Reload tayga
+
+- name: Enable tayga
+  ansible.builtin.service:
+    enabled: true
+    name: tayga.service
+    state: started

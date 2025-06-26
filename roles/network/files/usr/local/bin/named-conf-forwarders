@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+FORWARDERS_PATH='/etc/bind/named.conf.forwarders'
+
+# Load all forwarders from systemd-resolved into an array
+IFS=$'\n' read -r -d '' -a FORWARDERS < <(
+        /usr/bin/resolvectl dns | \
+                sed -n 's/^Link.*:\s\(.*\)$/\1/p'
+        )
+
+# Format forwarders array into string for bind
+printf -v BIND_FORWARDERS "%s; " "${FORWARDERS[@]}"
+
+# Update bind forwarders include file
+echo "forwarders { ${BIND_FORWARDERS}};" > "${FORWARDERS_PATH}"
+
+# Do not reload the service here. Used in systemd ExecStartPre=
+#/usr/bin/systemctl reload named.service

@@ -1,0 +1,16 @@
+---
+# defaults file for network
+network_nat64_enabled: false
+network_nat64_prefix: 64:ff9b::/96
+network_nat64_ipv4_pool: 100.64.0.0/10
+
+# Dedicated bind implementation for DNS64 only.
+# A central service it would be more prudent to configure bind directly.
+# Google DNS provides DNS64 servers as an alternative.
+# https://developers.google.com/speed/public-dns/docs/dns64
+network_dns64_enabled: false
+network_dns64_prefix: 64:ff9b::/96
+# If empty, forwarders will be taken from the host system settings.
+network_dns64_forwarders: []
+# - 1.1.1.1
+# - 8.8.8.8

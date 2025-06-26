@@ -1,0 +1,5 @@
+tun-device nat64
+ipv4-addr {{ network_nat64_ipv4_pool | ansible.utils.ipaddr('1') | split('/') | first }}
+prefix {{ network_nat64_prefix }}
+dynamic-pool {{ network_nat64_ipv4_pool }}
+data-dir /var/spool/tayga

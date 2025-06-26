@@ -83,23 +83,27 @@ ansible-pull -clocal -i,localhost \
 
 ## Playbooks
 
-| Playbook | Purpose | Notes |
-| -------- | ------- | ----- |
-| apt_upgrade_reboot | Run full system update and reboot if required. |
-| aws_sshd_pwd_enable | Enable/disable SSH password access and optionally set user password. |
-| aws_vrd_dev_lab | Configure a Virtual Research Desktop lab in AWS. |
-| edge_compute | Configure baseline edge compute host. |
+| Playbook                 | Purpose | Notes |
+| --------                 | ------- | ----- |
+| apt_upgrade_reboot       | Run full system update and reboot if required. |
+| aws_sshd_pwd_enable      | Enable/disable SSH password access and optionally set user password. |
+| aws_vrd_dev_lab          | Configure a Virtual Research Desktop lab in AWS. |
+| edge_compute             | Configure baseline edge compute host. |
 | [eks_create_cluster](docs/eks_create_cluster.md) | Deploy an EKS cluster. |
-| k8s_client | Configure Kubernetes client tools. |
-| microk8s_dev_env | Kubernetes cluster for development. Incorporating DNS resolution and configuration management, Certificate management, Load balancer and Ingress controller. | *WARNING; Alters the host system!* Uses include OIDC and other authentication integration work. Simulation of full disparate service. Includes full DNS provider functionality. |
-| nvidia_toolkit_install | Install/configure NVIDIA drivers, toolkit and CUDA. |
+| k8s_client               | Configure Kubernetes client tools. |
+| microk8s_dev_env         | Kubernetes cluster for development. Incorporating DNS resolution and configuration management, Certificate management, Load balancer and Ingress controller. | *WARNING; Alters the host system!* Uses include OIDC and other authentication integration work. Simulation of full disparate service. Includes DNS provider for specific sub-domain. |
+| nvidia_toolkit_install   | Install/configure NVIDIA drivers, toolkit and CUDA. |
 | os_create_server_cluster | OpenStack server cluster. | Usage example Kubernetes cluster on VMs. |
+| virtual_desktop          | VDI Virtual desktop configuration |
 
 ## Roles
 
-| Role | Purpose | Notes |
-| ---- | ------- | ----- |
-| microk8s | Install and configure MicroK8s on a single node. |
+| Role      | Purpose | Notes |
+| ----      | ------- | ----- |
+| desktop   | VDI Virtual desktop with multiple container runtimes and base toolings | Uses include development, workshops |
+| docker    | Docker container runtime and tools |
+| k8sclient | Kubernetes client tools and plugins |
+| microk8s  | Install and configure MicroK8s on a single node. |
 
 ## Cloud-init example
 

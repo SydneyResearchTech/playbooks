@@ -1,0 +1,53 @@
+# roles/network/tasks/bind/main.yml
+- name: Install named
+  ansible.builtin.package:
+    name:
+      - bind9
+    state: present
+
+- name: Configure named
+  ansible.builtin.template:
+    backup: true
+    dest: /etc/bind/named.conf
+    mode: "0644"
+    src: etc/bind/named.conf.j2
+  notify:
+    - Reload named
+
+- name: Configure named defaults
+  ansible.builtin.template:
+    backup: true
+    dest: /etc/default/named
+    mode: "0644"
+    src: etc/default/named.j2
+  notify:
+    - Restart named
+
+- name: Forwarders
+  when:
+    - not network_dns64_forwarders
+  block:
+    - name: Copy named-conf-forwarders
+      ansible.builtin.copy:
+        dest: /usr/local/bin/named-conf-forwarders
+        mode: "0755"
+        src: usr/local/bin/named-conf-forwarders
+      notify:
+        - Restart named
+
+    - name: Forwarders lookup pre-req
+      ansible.builtin.file:
+        mode: "0755"
+        path: /etc/systemd/system/named.service.d
+        state: directory
+
+    - name: Forwarders lookup
+      ansible.builtin.copy:
+        content: |
+          [Service]
+          ExecStartPre=/usr/local/bin/named-conf-forwarders
+        dest: /etc/systemd/system/named.service.d/ansible.conf
+        mode: "0644"
+      notify:
+        - Systemd daemon-reload
+        - Restart named

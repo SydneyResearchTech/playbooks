@@ -1,0 +1,20 @@
+---
+# handlers file for network
+- name: Systemd daemon-reload
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Reload tayga
+  ansible.builtin.service:
+    name: tayga.service
+    state: reloaded
+
+- name: Reload named
+  ansible.builtin.service:
+    name: named.service
+    state: reloaded
+
+- name: Restart named
+  ansible.builtin.service:
+    name: named.service
+    state: restarted

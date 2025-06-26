@@ -1,0 +1,18 @@
+---
+# tasks file for network
+- name: Update package cache if required
+  when:
+    - ansible_os_family == "Debian"
+  ansible.builtin.apt:
+    cache_valid_time: 86400
+    update_cache: true
+
+- name: NAT64
+  when:
+    - network_nat64_enabled
+  ansible.builtin.include_tasks: tayga/main.yml
+
+- name: DNS64
+  when:
+    - network_dns64_enabled
+  ansible.builtin.include_tasks: bind/main.yml

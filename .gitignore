@@ -8,3 +8,4 @@ __pycache__/
 /playbooks/tasks/postfix.*
 /roles/vpn/
 /roles/3dslicer/
+/docs/aws-run-instance.md
