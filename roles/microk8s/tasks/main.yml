@@ -1,6 +1,26 @@
 ---
 # tasks file for microk8s
-#
+- name: Verify IPv6 requirements
+  when:
+    - microk8s_cni_ipv6_enabled
+  block:
+    - name: Get IPv6 default route
+      ansible.builtin.command:
+        cmd: /usr/sbin/ip -6 -j route list type unicast scope global
+      register: ip_route_reg
+      changed_when: false
+
+    - name: Set ip6_route fact
+      ansible.builtin.set_fact:
+        route_ip6: "{{ ip_route_reg.stdout | from_json }}"
+
+    - name: Fail if host IPv6 address is not routable
+      when:
+        - route_ip6 | selectattr('dst', 'equalto', 'default') | length <= 0
+      ansible.builtin.fail:
+        msg:
+          - Kubernetes configured for IPv6 requires routable environment.
+
 - name: Update package cache
   when: "'Debian' in ansible_os_family"
   ansible.builtin.apt:

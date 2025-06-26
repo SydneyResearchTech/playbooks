@@ -12,6 +12,12 @@ microk8s_cni_ipv6_enabled: false
 microk8s_cni_ipv6_cluster_cidr: fdf4:8ab3:60fb::/64
 microk8s_cni_ipv6_service_cidr: fdf4:8ab3:60fb:fffe::/108
 
+# https://coredns.io/plugins/dns64/
+microk8s_dns64_enabled: false
+microk8s_dns64_prefix: 64:ff9b::/96
+microk8s_dns64_translate_all: false
+microk8s_dns64_allow_ipv4: false
+
 microk8s_dexidp_enabled: false
 microk8s_dexidp_port: 31000
 

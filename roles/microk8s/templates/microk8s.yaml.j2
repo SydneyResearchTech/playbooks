@@ -3,6 +3,9 @@ version: 0.1.0
 addons:
   - name: dns
   - name: rbac
+addonRepositories:
+  - name: usyd
+    url: https://github.com/SydneyResearchTech/microk8s-addons
 extraCNIEnv:
   IPv4_SUPPORT: {{ microk8s_cni_ipv4_enabled | to_json }}
   IPv4_CLUSTER_CIDR: {{ microk8s_cni_ipv4_cluster_cidr }}
@@ -13,4 +16,4 @@ extraCNIEnv:
   IPv6_SERVICE_CIDR: {{ microk8s_cni_ipv6_service_cidr }}
 {% endif %}
 extraSANs:
-  - {{ microk8s_cni_ipv4_service_cidr | ansible.utils.ipaddr('1') }}
+  - {{ microk8s_cni_ipv4_service_cidr | ansible.utils.ipaddr('1') | split('/') | first }}
