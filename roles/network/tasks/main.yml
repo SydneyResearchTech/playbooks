@@ -11,8 +11,30 @@
   when:
     - network_nat64_enabled
   ansible.builtin.include_tasks: tayga/main.yml
+  # Enable forwarding
 
 - name: DNS64
   when:
     - network_dns64_enabled
   ansible.builtin.include_tasks: bind/main.yml
+
+- name: Configure systemd-resolved
+  when:
+    - network_dns64_enabled
+  block:
+    - name: Create systemd resolved dump config directory
+      ansible.builtin.file:
+        mode: "755"
+        path: /etc/systemd/resolved.conf.d
+        state: directory
+
+    - name: Override systemd-resolved
+      ansible.builtin.copy:
+        content: |
+          [Resolve]
+          DNS=127.0.0.1
+          FallbackDNS=8.8.8.8
+        dest: /etc/systemd/resolved.conf.d/dns64.conf
+        mode: "0644"
+      notify:
+        - Restart systemd-resolved

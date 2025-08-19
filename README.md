@@ -2,16 +2,19 @@
 
 ## Using the Collection from a controlling host or jump host
 
-This *Quick start guide* assumes you have `ansible` installed using `pipx`.
+*Quick start guide*
 
 ```bash
-# Install the University of Sydneys, Research Technology Ansible collection.
+sudo apt-get update
+sudo apt-get -y install pipx
+
+# Install The University of Sydneys, Research Technology Ansible collection.
 ansible-galaxy collection install --force "git+https://github.com/SydneyResearchTech/playbooks.git"
 
 # Install any python dependancies.
 pipx runpip ansible install -r $HOME/.ansible/collections/ansible_collections/restek/core/requirements.txt
 
-# Run one of the Ansible playbooks from the collection.
+# Run one of the Ansible playbooks from the collection. E.g.,
 ansible-playbook -c local -e target=localhost restek.core.k8s_client
 ```
 

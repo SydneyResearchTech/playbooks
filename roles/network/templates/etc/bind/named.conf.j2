@@ -9,7 +9,7 @@ options {
   include "/etc/bind/named.conf.forwarders";
 {% endif %}
   forward only;
-  dnssec-validation auto;
+  dnssec-validation no;
   listen-on-v6 { ::1; };
   listen-on { 127.0.0.1; };
   dns64 {{ network_dns64_prefix }} {

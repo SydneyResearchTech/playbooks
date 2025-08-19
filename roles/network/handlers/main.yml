@@ -7,7 +7,7 @@
 - name: Reload tayga
   ansible.builtin.service:
     name: tayga.service
-    state: reloaded
+    state: restarted
 
 - name: Reload named
   ansible.builtin.service:
@@ -17,4 +17,9 @@
 - name: Restart named
   ansible.builtin.service:
     name: named.service
+    state: restarted
+
+- name: Restart systemd-resolved
+  ansible.builtin.service:
+    name: systemd-resolved.service
     state: restarted

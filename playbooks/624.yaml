@@ -1,0 +1,6 @@
+- name: IPv6 host within IPv4 only network
+  hosts: "{{ target | default('all') }}"
+  become: true
+
+  roles:
+    - name: restek.core.network
