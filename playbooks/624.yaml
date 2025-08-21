@@ -3,4 +3,4 @@
   become: true
 
   roles:
-    - name: restek.core.network
+    - role: restek.core.network
