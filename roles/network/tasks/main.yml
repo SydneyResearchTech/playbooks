@@ -1,5 +1,9 @@
 ---
 # tasks file for network
+- name: Set facts
+  ansible.builtin.set_fact:
+    ipv6_address: "{{ ansible_default_ipv6.address | default('') }}"
+
 - name: Update package cache if required
   when:
     - ansible_os_family == "Debian"
@@ -7,33 +11,32 @@
     cache_valid_time: 86400
     update_cache: true
 
-- name: NAT64
+- name: Create systemd resolved dump config directory
+  ansible.builtin.file:
+    mode: "755"
+    path: /etc/systemd/resolved.conf.d
+    state: directory
+
+- name: Configure 6to4 conversions
   when:
     - network_nat64_enabled
-  ansible.builtin.include_tasks: tayga/main.yml
-  # Enable forwarding
-
-- name: DNS64
-  when:
-    - network_dns64_enabled
-  ansible.builtin.include_tasks: bind/main.yml
-
-- name: Configure systemd-resolved
-  when:
-    - network_dns64_enabled
+    - ipv6_address
   block:
-    - name: Create systemd resolved dump config directory
-      ansible.builtin.file:
-        mode: "755"
-        path: /etc/systemd/resolved.conf.d
-        state: directory
+    - name: NAT64
+      ansible.builtin.include_tasks: tayga/main.yml
+      # Enable forwarding
 
+    - name: DNS64
+      ansible.builtin.include_tasks: bind/main.yml
+
+    # ISSUE: DNS=127.0.0.1 creates lookup loop in CoreDNS
+    # ISSUE: FallbackDNS does not recover back to primary if connection issue triggers
     - name: Override systemd-resolved
       ansible.builtin.copy:
         content: |
           [Resolve]
-          DNS=127.0.0.1
-          FallbackDNS=8.8.8.8
+          DNS={{ ipv6_address }}
+          #FallbackDNS=8.8.8.8
         dest: /etc/systemd/resolved.conf.d/dns64.conf
         mode: "0644"
       notify:
