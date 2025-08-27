@@ -17,6 +17,7 @@ addons:
   - name: coredns
 {% if not (calico_enabled and not ipv6) %}
   - name: vpc-cni
+    configurationValues: '{"enableNetworkPolicy": "true"}'
 {% endif %}
   - name: eks-pod-identity-agent
 {% for addon in addons %}
@@ -50,14 +51,12 @@ iam:
         namespace: ack-system
       attachPolicyARNs:
         - arn:aws:iam::aws:policy/AmazonRDSFullAccess
-      roleOnly: false
   {% if external_dns_zone %}
     - metadata:
         name: external-dns
         namespace: external-dns
       attachPolicyARNs:
         - {{ route53_policy_arn }}
-      roleOnly: false
   {% endif %}
 {% endif %}
   withOIDC: true

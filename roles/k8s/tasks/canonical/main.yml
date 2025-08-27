@@ -1,0 +1,30 @@
+---
+# tasks file for Canonical k8s
+- name: Install Canonical k8s
+  community.general.snap:
+    channel: "{{ k8s_version }}"
+    classic: true
+    name:
+      - k8s
+    state: present
+
+- name: Get k8s status
+  ansible.builtin.command:
+    cmd: k8s status --output-format=json --wait-ready
+  changed_when: false
+  register: k8s_status_reg
+  ignore_errors: true
+
+- name: Debug k8s status
+  ansible.builtin.debug:
+    var: k8s_status_reg
+    verbosity: 1
+
+- name: Bootstrap Canonical k8s
+  when:
+    - k8s_status_reg.rc != 0
+  ansible.builtin.command:
+    cmd: k8s bootstrap --address='::/0' --file=- --output-format=json
+    stdin: "{{ lookup('ansible.builtin.template', 'canonical/bootstrap.yaml.j2') }}"
+  changed_when: true
+  register: k8s_bootstrap_reg

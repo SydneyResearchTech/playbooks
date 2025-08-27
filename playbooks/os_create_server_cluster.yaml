@@ -17,6 +17,8 @@
       - server.hot.yaml
       - server-asg.hot.yaml
       - lb-vip.hot.yaml
+    snap_volume_size: 50
+    snap_volume_type: Nirin2_Transaction
 
   handlers:
     - name: Cleanup tmpdir
@@ -34,6 +36,17 @@
         msg: "'os_cloud', 'stack_name' must be defined"
 
   tasks:
+    - name: Cloud settings
+      ansible.builtin.set_fact:
+        snap_volume_size: "{{
+          snap_volume_size
+          if (group_names | select('ansible.builtin.regex_search', '^cloud_nci_') | list | length > 0)
+          else 0 }}"
+        snap_volume_type: "{{
+          'Nirin2_Transaction'
+          if (group_names | select('ansible.builtin.regex_search', '^cloud_nci_') | list | length > 0)
+          else snap_volume_type }}"
+
     - name: Create tmpdir
       ansible.builtin.tempfile:
         state: directory
@@ -59,8 +72,8 @@
       ansible.builtin.copy:
         content: |
           parameter_defaults:
-            volume_size: 20
-            volume_type: Nirin2_Transaction
+            snap_volume_size: {{ snap_volume_size }}
+            snap_volume_type: {{ snap_volume_type }}
         dest: "{{ tmpdir.path }}/ansible.env.yaml"
         mode: "0644"
 
@@ -111,7 +124,7 @@
       ansible.builtin.add_host:
         groups:
           - all
-          - microk8s
+          - edge_compute
           - stack_{{ stack_reg.stack.name }}
         name: "{{ item.name }}"
         ansible_host: "{{ item.access_ipv4 }}"
@@ -124,7 +137,7 @@
 
 
 - name: Configure server hosts
-  hosts: "stack_{{ stack_name }},&microk8s"
+  hosts: "stack_{{ stack_name }},&edge_compute"
   become: true
   vars:
     os_cloud: ""
@@ -142,17 +155,18 @@
       become: false
       block:
         - name: OpenStack server port
+          delegate_to: localhost
           openstack.cloud.port_info:
             cloud: "{{ os_cloud }}"
             filters:
               mac_address: "{{ ansible_default_ipv4.macaddress }}"
-          delegate_to: localhost
           register: port_reg
         # - ansible.builtin.debug: {var: port_reg}
         # - ansible.builtin.debug: {msg: "{{ os_allowed_address_pairs | community.general.json_query('[].{\"ip_address\": @}') }}"}
 
         # ISSUE: state is present but all of the following are missing: network
         - name: OpenStack port allowed address pairs
+          delegate_to: localhost
           when: 0 > 1
           openstack.cloud.port:
             cloud: "{{ os_cloud }}"
@@ -160,9 +174,9 @@
             name: "{{ port_reg.ports.0.name }}"
             network: ""
             state: present
-          delegate_to: localhost
 
         - name: OpenStack port allowed address pairs WORKAROUND
+          delegate_to: localhost
           ansible.builtin.command:
             cmd: >-
               openstack port set --os-cloud={{ os_cloud }}
@@ -171,18 +185,25 @@
               --allowed-address ip-address={{ ip_address }}
               {% endfor %}
               {{ port_reg.ports.0.name }}
-          delegate_to: localhost
           register: port_set_reg
           changed_when: true
         # - ansible.builtin.debug: {var: port_set_reg}
 
-        - name: Set fact microk8s_metallb_range
+        - name: Set load balancer facts
           when: os_allowed_address_pairs
           ansible.builtin.set_fact:
+            load_balancer_address_pool: "{{ os_allowed_address_pairs | product(['32']) | map('join', '/') | list }}"
             microk8s_metallb_address_pool: "{{ os_allowed_address_pairs | product(['32']) | map('join', '/') | list }}"
         # - ansible.builtin.debug: {var: microk8s_metallb_address_pool}
 
   roles:
-    - role: microk8s
-      when: inventory_hostname in groups["microk8s"]
+    - role: restek.core.network
+      when:
+        - inventory_hostname in groups["edge_compute"]
+      vars:
+        network_nat64_enabled: true
+        network_dns64_enabled: true
+  #  - role: microk8s
+  #    when: inventory_hostname in groups["microk8s"]
+
   tasks: []

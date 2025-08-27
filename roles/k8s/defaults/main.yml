@@ -1,0 +1,6 @@
+---
+# defaults file for k8s
+k8s_type: canonical
+k8s_version: stable
+k8s_extra_sans: []
+# - "{{ hostvars[inventory_hostname]['public_ip_address'] }}"

@@ -26,7 +26,7 @@
     flux_dir: "{{ (lookup('ansible.builtin.env', 'HOME'), 'flux') | path_join }}"
     ipv6: true
     karpenter_namespace: kube-system
-    karpenter_version: "1.3.4"
+    karpenter_version: "1.5.2"
     kubernetes_version: "1.33"
     organisation: Research Technology
     vpc_cidr: "192.168.0.0/16"
@@ -230,16 +230,24 @@
           - key: "tag:kubernetes.io/cluster/{{ cluster_name }}"
             value: owned
       register: cluster_sg_reg
-    # - ansible.builtin.debug: {var: cluster_sg_reg }
+
+    - name: DEBUG EKS Cluster Security Group
+      ansible.builtin.debug:
+        var: cluster_sg_reg
+        verbosity: 1
 
     - name: Get EKS cluster subnets
       amazon.aws.ec2_vpc_subnet_info:
+        profile: "{{ aws_profile }}"
         filters:
           "tag:eksctl.cluster.k8s.io/v1alpha1/cluster-name": "{{ cluster_name }}"
           "tag:kubernetes.io/role/elb": 1
-        profile: "{{ aws_profile }}"
       register: cluster_sn_reg
-    # - ansible.builtin.debug: {var: cluster_sn_reg}
+
+    - name: DEBUG EKS cluster subnet values
+      ansible.builtin.debug:
+        var: cluster_sn_reg
+        verbosity: 1
 
     - name: Post EKS cluster creation
       when:
@@ -371,15 +379,15 @@
             msg: >-
               aws cloudformation create-stack
               --profile {{ aws_profile }}
-              --template-body=file:///$HOME/cfn-templates/efs.cfn.yml
+              --template-body={{ efs_cfn_reg.content | to_json }}
               --tags='{{ aws_tags | to_json }}'
               --stack-name=eks-{{ cluster_name }}-efs-csi
               --parameters
               ParameterKey=VpcId,ParameterValue={{ cluster_sg_reg.security_groups.0.vpc_id }}
               ParameterKey=SecurityGroupId,ParameterValue={{ cluster_sg_reg.security_groups.0.group_id }}
-              ParameterKey=SubnetId1,ParameterValue={{ cluster_sn_reg.subnets.0.id }}
-              ParameterKey=SubnetId2,ParameterValue={{ cluster_sn_reg.subnets.1.id }}
-              ParameterKey=SubnetId3,ParameterValue={{ cluster_sn_reg.subnets.2.id }}
+              {% for subnet_id in cluster_sn_reg.subnets %}
+              ParameterKey=SubnetId{{ loop.index + 1 }},ParameterValue={{ subnet_id }}
+              {% endfor %}
             verbosity: 1
 
         - name: EFS deployment
@@ -396,8 +404,8 @@
               VpcId: "{{ cluster_sg_reg.security_groups.0.vpc_id }}"
               SecurityGroupId: "{{ cluster_sg_reg.security_groups.0.group_id }}"
               SubnetId1: "{{ cluster_sn_reg.subnets.0.id }}"
-              SubnetId2: "{{ cluster_sn_reg.subnets.1.id }}"
-              SubnetId3: "{{ cluster_sn_reg.subnets.2.id }}"
+              SubnetId2: "{{ cluster_sn_reg.subnets.1.id | default('AWS::NoValue') }}"
+              SubnetId3: "{{ cluster_sn_reg.subnets.2.id | default('AWS::NoValue') }}"
           register: efs_reg
         # - ansible.builtin.debug: {var: efs_reg}
 
@@ -470,9 +478,11 @@
                   ansible.builtin.copy:
                     content: |
                       creation_rules:
-                      - path_regex: .*.ya?ml
+                      - path_regex: '.*.ya?ml'
                         encrypted_regex: '^(data|stringData)$'
                         age: >-
+                          {{ agekey_public }}
+                      - age: >-
                           {{ agekey_public }}
                     dest: "{{ flux_dir }}/{{ item }}"
                     mode: "0644"

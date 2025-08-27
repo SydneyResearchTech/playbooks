@@ -24,7 +24,22 @@
   block:
     - name: NAT64
       ansible.builtin.include_tasks: tayga/main.yml
-      # Enable forwarding
+
+    - name: Configure forwarding
+      ansible.builtin.copy:
+        content: |
+          net.ipv4.ip_forward=1
+          net.ipv6.conf.all.forwarding=1
+        dest: /etc/sysctl.d/99-ansible-forwarding.conf
+        mode: "0644"
+      register: forwarding_reg
+
+    - name: Enable forwarding  # noqa: no-handler
+      when:
+        - forwarding_reg.changed
+      ansible.builtin.command:
+        cmd: sysctl --load=/etc/sysctl.d/99-ansible-forwarding.conf
+      changed_when: true
 
     - name: DNS64
       ansible.builtin.include_tasks: bind/main.yml

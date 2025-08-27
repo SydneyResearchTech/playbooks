@@ -1,0 +1,18 @@
+cluster-config:
+  network:
+    enabled: true
+  dns:
+    enabled: true
+    cluster-domain: cluster.local
+  local-storage:
+    enabled: true
+    local-path: /var/snap/k8s/common/rawfile-storage
+    reclaim-policy: Delete
+    default: true
+  metrics-server:
+    enabled: true
+pod-cidr: fde7:4faa:8293::10:0/108
+service-cidr: fde7:4faa:8293::/108
+secure-port: 6443
+datastore-type: k8s-dqlite
+extra-sans: {{ k8s_extra_sans | to_json }}
