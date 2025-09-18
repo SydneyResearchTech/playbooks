@@ -84,6 +84,7 @@
         profile: "{{ aws_profile }}"
         stack_name: "{{ stack_name }}"
       register: eks_stack
+    # - ansible.builtin.debug: {var: eks_stack}
 
     - name: Delete EKS cluster
       when: "cluster_name in (list_clusters.stdout | from_json).clusters"
@@ -102,7 +103,7 @@
           ansible.builtin.set_fact:
             kubeconfig: "{{ kubeconfig_output.stdout | from_yaml }}"
             vpc_id: >-
-              {{ eks_stack[stack_name]['stack_description']['outputs'] |
+              {{ eks_stack['cloudformation'][stack_name]['stack_description']['outputs'] |
               selectattr('output_key', 'equalto', 'VPC') |
               map(attribute='output_value') | first }}
 
@@ -149,26 +150,31 @@
               vpc-id: "{{ vpc_id }}"
             profile: "{{ aws_profile }}"
           register: guardduty_vpc_endpoint
+        # - ansible.builtin.debug: {var: guardduty_vpc_endpoint}
 
         - name: GuardDuty VPC endpoint
           amazon.aws.ec2_vpc_endpoint:
             profile: "{{ aws_profile }}"
             state: absent
-            vpc_endpoint_id: "{{ guardduty_vpc_endpoint.vpc_endpoints | map(attribute='vpc_endpoint_id') | list }}"
+            vpc_endpoint_id: "{{ item.vpc_endpoint_id }}"
+            wait: true
+          loop: "{{ guardduty_vpc_endpoint.vpc_endpoints }}"
 
-        - name: GuardDuty Security Group
+        - name: GuardDuty Security Group?
           amazon.aws.ec2_security_group_info:
             filters:
               "tag:GuardDutyManaged": true
               vpc-id: "{{ vpc_id }}"
             profile: "{{ aws_profile }}"
           register: guardduty_security_group
+        # - ansible.builtin.debug: {var: guardduty_security_group}
 
         - name: GuardDuty Security Group
           amazon.aws.ec2_security_group:
-            group_id: "{{ guardduty_security_group.security_groups | map(attribute='group_id') | list }}"
+            group_id: "{{ item.group_id }}"
             profile: "{{ aws_profile }}"
             state: absent
+          loop: "{{ guardduty_security_group.security_groups }}"
 
         - name: Delete kubernetes resources
           kubernetes.core.k8s:
@@ -180,7 +186,7 @@
             {{ k8s_info_reg.resources |
             map(attribute='metadata.name') |
             list |
-            difference(namespaces) }}"
+            difference(namespaces) | list }}
 
         # TODO Services using the LB with public IP need to be removed before cluster deleted
 
@@ -206,8 +212,8 @@
           ansible.builtin.command:
             cmd: >
               eksctl delete cluster
+              --name {{ cluster_name }}
               --wait
-              --config-file "{{ flux_dir }}/clusters/{{ cluster_name }}.eks.yaml"
               --profile {{ aws_profile }}
           register: eks_delete
           changed_when: false
