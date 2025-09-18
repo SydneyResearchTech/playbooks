@@ -1,5 +1,4 @@
 # roles/microk8s/tasks/ingress-lb-patch.yml
-#
 - name: Ingress service
   ansible.builtin.shell:
     cmd: |
@@ -25,19 +24,19 @@
             targetPort: 443
       EOT
     executable: /bin/bash
-  register: ingress_srv
-  changed_when: "'unchanged' not in ingress_srv.stdout"
+  register: microk8s_ingress_srv_reg
+  changed_when: "'unchanged' not in microk8s_ingress_srv_reg.stdout"
   run_once: true
 
 - name: Get nginx-ingress controller details?
   ansible.builtin.command:
     cmd: microk8s kubectl -ningress get daemonset nginx-ingress-microk8s-controller -o yaml
   changed_when: false
-  register: ingress_controller_output
+  register: microk8s_ingress_controller_reg
 
 - name: Ingress IP via LB
   when:
-    - "'- --publish-service=$(POD_NAMESPACE)/ingress' not in ingress_controller_output.stdout"
+    - "'- --publish-service=$(POD_NAMESPACE)/ingress' not in microk8s_ingress_controller_reg.stdout"
   ansible.builtin.shell:
     cmd: |
       set -o pipefail

@@ -144,6 +144,7 @@
   changed_when: false
 
 - name: Update server certificate
+  when: 0 > 1
   ansible.builtin.blockinfile:
     block: |
       DNS.6 = {{ ansible_fqdn }}
@@ -197,11 +198,20 @@
   run_once: true
   # delegate_to: cluster_lead
   block:
+    - name: Waiting for stable cluster
+      ansible.builtin.command:
+        cmd: microk8s kubectl get pods --field-selector status.phase!=Running
+      register: kubectl_get_pods_reg
+      retries: 60
+      until: "'No resources found' in kubectl_get_pods_reg.stderr"
+      changed_when: false
+
     - name: Metallb config.
       when: metallb
       ansible.builtin.include_tasks: metallb/configure.yml
 
     - name: Enable addons
+      when: 0 > 1
       ansible.builtin.shell:
         cmd: |
           set -eo pipefail
@@ -220,6 +230,13 @@
           }}"
       register: enable_addon_output
       changed_when: "'is enabled' in enable_addon_output.stdout"
+
+    - name: Enable addons
+      ansible.builtin.command:
+        cmd: microk8s enable {{ item }}
+      with_items: "{{ microk8s_addons }}"
+      register: microk8s_enable_reg
+      changed_when: "'is enabled' in microk8s_enable_reg.stdout"
 
     - name: Configure cert-manager
       ansible.builtin.import_tasks: configure-cert-manager.yml

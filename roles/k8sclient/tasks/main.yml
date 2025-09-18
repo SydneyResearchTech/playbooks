@@ -3,15 +3,15 @@
 - name: Set facts
   ansible.builtin.set_fact:
     # dpkg --print-architecture
-    dpkg_arch: >-
+    k8sclient_dpkg_arch: >-
       {{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' }}
-    dpkg_os: "{{ 'linux' if 'Darwin' not in ansible_os_family else 'darwin' }}"
+    k8sclient_dpkg_os: "{{ 'linux' if 'Darwin' not in ansible_os_family else 'darwin' }}"
 
 - name: Set facts
   ansible.builtin.set_fact:
-    kubelogin_release: "kubelogin_\
+    k8sclient_kubelogin_release: "kubelogin_\
       {{ 'linux' if 'Darwin' not in ansible_os_family else 'darwin' }}_\
-      {{ dpkg_arch }}"
+      {{ k8sclient_dpkg_arch }}"
 
 - name: Update repository cache if required
   when: "'Debian' in ansible_os_family"
@@ -55,7 +55,7 @@
           v{{ k8sclient_calicoctl_version }}/\
           calicoctl-\
           {{ 'linux' if 'Darwin' not in ansible_os_family else 'darwin' }}-\
-          {{ dpkg_arch }}"
+          {{ k8sclient_dpkg_arch }}"
 
 - name: Create calicoctl symlink
   ansible.builtin.file:
@@ -66,10 +66,10 @@
 # https://github.com/int128/kubelogin
 - name: Download kubelogin release
   ansible.builtin.get_url:
-    dest: /usr/local/src/{{ kubelogin_release }}-{{ k8sclient_kubelogin_version }}.zip
+    dest: /usr/local/src/{{ k8sclient_kubelogin_release }}-{{ k8sclient_kubelogin_version }}.zip
     mode: "0644"
     url: "https://github.com/int128/kubelogin/releases/download/\
-          v{{ k8sclient_kubelogin_version }}/{{ kubelogin_release }}.zip"
+          v{{ k8sclient_kubelogin_version }}/{{ k8sclient_kubelogin_release }}.zip"
 
 - name: Install kubelogin
   ansible.builtin.unarchive:
@@ -77,7 +77,7 @@
     include: [kubelogin]
     mode: "0755"
     remote_src: true
-    src: /usr/local/src/{{ kubelogin_release }}-{{ k8sclient_kubelogin_version }}.zip
+    src: /usr/local/src/{{ k8sclient_kubelogin_release }}-{{ k8sclient_kubelogin_version }}.zip
 
 - name: Create kubectl-oidc_login kubectl plugin symlink
   ansible.builtin.file:
@@ -90,27 +90,27 @@
 # https://github.com/int128/kubelogin
 - name: Download krew
   ansible.builtin.get_url:
-    dest: /usr/local/src/krew-{{ dpkg_os }}_{{ dpkg_arch }}.tar.gz
+    dest: /usr/local/src/krew-{{ k8sclient_dpkg_os }}_{{ k8sclient_dpkg_arch }}.tar.gz
     mode: "0644"
     url: "https://github.com/kubernetes-sigs/krew/releases/latest/download/\
-          krew-{{ dpkg_os }}_{{ dpkg_arch }}.tar.gz"
+          krew-{{ k8sclient_dpkg_os }}_{{ k8sclient_dpkg_arch }}.tar.gz"
 
 - name: Unarchive krew
   ansible.builtin.unarchive:
-    creates: /usr/local/src/krew-{{ dpkg_os }}_{{ dpkg_arch }}
+    creates: /usr/local/src/krew-{{ k8sclient_dpkg_os }}_{{ k8sclient_dpkg_arch }}
     dest: /usr/local/src
     include:
-      - ./krew-{{ dpkg_os }}_{{ dpkg_arch }}
+      - ./krew-{{ k8sclient_dpkg_os }}_{{ k8sclient_dpkg_arch }}
     mode: "0755"
     remote_src: true
-    src: /usr/local/src/krew-{{ dpkg_os }}_{{ dpkg_arch }}.tar.gz
+    src: /usr/local/src/krew-{{ k8sclient_dpkg_os }}_{{ k8sclient_dpkg_arch }}.tar.gz
 
 - name: Install krew kubectl plugin
   ansible.builtin.copy:
     dest: /usr/local/bin/kubectl-krew
     mode: "0755"
     remote_src: true
-    src: /usr/local/src/krew-{{ dpkg_os }}_{{ dpkg_arch }}
+    src: /usr/local/src/krew-{{ k8sclient_dpkg_os }}_{{ k8sclient_dpkg_arch }}
 
 - name: Configure Krew profile and install oidc-login
   ansible.builtin.copy:

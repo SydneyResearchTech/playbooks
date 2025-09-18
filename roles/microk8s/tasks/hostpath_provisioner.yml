@@ -14,7 +14,7 @@
       volumeBindingMode: WaitForFirstConsumer
       EOT
     executable: /bin/bash
-  register: hostpath_sc
+  register: microk8s_hostpath_sc_reg
   with_items: "{{ microk8s_hostpaths }}"
-  changed_when: "'unchanged' not in hostpath_sc.stdout"
+  changed_when: "'unchanged' not in microk8s_hostpath_sc_reg.stdout"
   run_once: true

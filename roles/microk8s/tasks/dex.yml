@@ -6,11 +6,11 @@
   ansible.builtin.command:
     cmd: microk8s kubectl -n cert-manager get secrets selfsigned-ca-secret -ojson
   changed_when: false
-  register: ca_cert_ret
+  register: microk8s_ca_cert_reg
 
 - name: Dex set facts
   ansible.builtin.set_fact:
-    ca_cert: "{{ ca_cert_ret.stdout | from_json }}"
+    microk8s_ca_cert: "{{ microk8s_ca_cert_reg.stdout | from_json }}"
 
 - name: Dex certs secret
   kubernetes.core.k8s:
@@ -18,11 +18,11 @@
     state: present
     template:
       path: dex_certs_secret.yaml.j2
-  register: dex_secret_ret
+  register: microk8s_dex_secret_reg
 
 - name: Dex ca.crt
   ansible.builtin.copy:
-    content: "{{ ca_cert['data']['ca.crt'] | b64decode }}"
+    content: "{{ microk8s_ca_cert['data']['ca.crt'] | b64decode }}"
     dest: /var/snap/microk8s/current/certs/dex-ca.crt
     mode: "0644"
 

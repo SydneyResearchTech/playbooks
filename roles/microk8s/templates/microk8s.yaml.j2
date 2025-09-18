@@ -16,4 +16,9 @@ extraCNIEnv:
   IPv6_SERVICE_CIDR: {{ microk8s_cni_ipv6_service_cidr }}
 {% endif %}
 extraSANs:
+  - {{ ansible_fqdn }}
+  - {{ ansible_hostname }}
+  - {{ ansible_hostname }}.local
+  - {{ ansible_default_ipv4.address }}
   - {{ microk8s_cni_ipv4_service_cidr | ansible.utils.ipaddr('1') | split('/') | first }}
+  - {{ microk8s_cni_ipv6_service_cidr | ansible.utils.ipaddr('1') | split('/') | first }}
