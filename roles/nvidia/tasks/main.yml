@@ -2,8 +2,8 @@
 # tasks file for nvidia
 - name: Set facts
   ansible.builtin.set_fact:
-    distro: "{{ [(ansible_distribution | lower), (ansible_distribution_version | split('.') | join())] | join() }}"
-    arch: "{{ ansible_architecture }}"
+    nvidia_distro: "{{ [(ansible_distribution | lower), (ansible_distribution_version | split('.') | join())] | join() }}"
+    nvidia_arch: "{{ ansible_architecture }}"
 
 - name: Install NVIDIA driver
   when:

@@ -2,7 +2,7 @@
 # tasks file for network
 - name: Set facts
   ansible.builtin.set_fact:
-    ipv6_address: "{{ ansible_default_ipv6.address | default('') }}"
+    network_ipv6_address: "{{ ansible_default_ipv6.address | default('') }}"
 
 - name: Update package cache if required
   when:
@@ -20,7 +20,7 @@
 - name: Configure 6to4 conversions
   when:
     - network_nat64_enabled
-    - ipv6_address
+    - network_ipv6_address
   block:
     - name: NAT64
       ansible.builtin.include_tasks: tayga/main.yml
@@ -32,11 +32,11 @@
           net.ipv6.conf.all.forwarding=1
         dest: /etc/sysctl.d/99-ansible-forwarding.conf
         mode: "0644"
-      register: forwarding_reg
+      register: network_forwarding_reg
 
     - name: Enable forwarding  # noqa: no-handler
       when:
-        - forwarding_reg.changed
+        - network_forwarding_reg.changed
       ansible.builtin.command:
         cmd: sysctl --load=/etc/sysctl.d/99-ansible-forwarding.conf
       changed_when: true
@@ -50,7 +50,7 @@
       ansible.builtin.copy:
         content: |
           [Resolve]
-          DNS={{ ipv6_address }}
+          DNS={{ network_ipv6_address }}
           #FallbackDNS=8.8.8.8
         dest: /etc/systemd/resolved.conf.d/dns64.conf
         mode: "0644"

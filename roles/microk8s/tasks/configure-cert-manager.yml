@@ -2,7 +2,7 @@
 - name: Selfsigned issuer
   kubernetes.core.k8s:
     apply: true
-    kubeconfig: "{{ kubeconfig }}"
+    kubeconfig: "{{ microk8s_kubeconfig }}"
     state: present
     definition:
       apiVersion: cert-manager.io/v1
@@ -15,7 +15,7 @@
 - name: Selfsigned CA issuer
   kubernetes.core.k8s:
     apply: true
-    kubeconfig: "{{ kubeconfig }}"
+    kubeconfig: "{{ microk8s_kubeconfig }}"
     state: present
     definition:
       apiVersion: cert-manager.io/v1
@@ -29,7 +29,7 @@
 - name: Selfsigned CA
   kubernetes.core.k8s:
     apply: true
-    kubeconfig: "{{ kubeconfig }}"
+    kubeconfig: "{{ microk8s_kubeconfig }}"
     state: present
     definition:
       apiVersion: cert-manager.io/v1

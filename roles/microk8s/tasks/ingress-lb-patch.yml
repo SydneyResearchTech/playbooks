@@ -44,6 +44,6 @@
       |sed -e 's|- --publish-status-address=.*|- --publish-service=$(POD_NAMESPACE)/ingress|' \
       |microk8s kubectl apply -f -
     executable: /bin/bash
-  register: ingress_lb
-  changed_when: "'unchanged' not in ingress_lb.stdout"
+  register: microk8s_ingress_lb_reg
+  changed_when: "'unchanged' not in microk8s_ingress_lb_reg.stdout"
   run_once: true

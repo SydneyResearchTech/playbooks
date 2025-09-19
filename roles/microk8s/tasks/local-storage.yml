@@ -42,9 +42,9 @@
                 values:
                 - "{{ ansible_hostname }}"
       EOT
-  register: local_storage_pv
+  register: microk8s_local_storage_pv_reg
   with_items: "{{ microk8s_local_storage }}"
   when:
     - item.claimRef is defined
-  changed_when: "'unchanged' not in local_storage_pv.stdout"
+  changed_when: "'unchanged' not in microk8s_local_storage_pv_reg.stdout"
   run_once: true

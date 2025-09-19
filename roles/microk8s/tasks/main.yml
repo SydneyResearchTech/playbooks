@@ -7,16 +7,16 @@
     - name: Get IPv6 default route
       ansible.builtin.command:
         cmd: /usr/sbin/ip -6 -j route list type unicast scope global
-      register: ip_route_reg
+      register: microk8s_ip_route_reg
       changed_when: false
 
     - name: Set ip6_route fact
       ansible.builtin.set_fact:
-        route_ip6: "{{ ip_route_reg.stdout | from_json }}"
+        microk8s_route_ip6: "{{ microk8s_ip_route_reg.stdout | from_json }}"
 
     - name: Fail if host IPv6 address is not routable
       when:
-        - route_ip6 | selectattr('dst', 'equalto', 'default') | length <= 0
+        - microk8s_route_ip6 | selectattr('dst', 'equalto', 'default') | length <= 0
       ansible.builtin.fail:
         msg:
           - Kubernetes configured for IPv6 requires routable environment.
@@ -112,14 +112,14 @@
       {{ microk8s_helm }} plugin list | grep -q '^diff\s' || \
       {{ microk8s_helm }} plugin install https://github.com/databus23/helm-diff
     executable: /bin/bash
-  register: helm_diff_ret
-  changed_when: "'diff' in helm_diff_ret.stdout"
+  register: microk8s_helm_diff_reg
+  changed_when: "'diff' in microk8s_helm_diff_reg.stdout"
 
 - name: Set facts
   ansible.builtin.set_fact:
     microk8s_status: "{{ microk8s_status_output.stdout | from_yaml }}"
-    kubeconfig: "{{ microk8s_config_reg.stdout | from_json }}"
-    metallb: "{{ microk8s_enable | select('search', '^metallb') | first | default('') }}"
+    microk8s_kubeconfig: "{{ microk8s_config_reg.stdout | from_json }}"
+    microk8s_metallb: "{{ microk8s_enable | select('search', '^metallb') | first | default('') }}"
 
 - name: Configure kubectl client
   ansible.builtin.shell:
@@ -201,13 +201,13 @@
     - name: Waiting for stable cluster
       ansible.builtin.command:
         cmd: microk8s kubectl get pods --field-selector status.phase!=Running
-      register: kubectl_get_pods_reg
+      register: microk8s_kubectl_get_pods_reg
       retries: 60
-      until: "'No resources found' in kubectl_get_pods_reg.stderr"
+      until: "'No resources found' in microk8s_kubectl_get_pods_reg.stderr"
       changed_when: false
 
     - name: Metallb config.
-      when: metallb
+      when: microk8s_metallb
       ansible.builtin.include_tasks: metallb/configure.yml
 
     - name: Enable addons
@@ -228,8 +228,8 @@
             ((microk8s_hostpaths | length > 0) and (microk8s_enable | select('search', 'hostpath-storage') | length == 0)) |
             ternary(['hostpath-storage'], [])
           }}"
-      register: enable_addon_output
-      changed_when: "'is enabled' in enable_addon_output.stdout"
+      register: microk8s_enable_addon_reg
+      changed_when: "'is enabled' in microk8s_enable_addon_reg.stdout"
 
     - name: Enable addons
       ansible.builtin.command:
@@ -246,7 +246,7 @@
     - name: Ingress nginx service via metallb
       when:
         - "'ingress' in microk8s_enable"
-        - metallb
+        - microk8s_metallb
       kubernetes.core.k8s:
         apply: true
         definition:
@@ -262,7 +262,7 @@
             ports:
               - {name: http, protocol: TCP, port: 80, targetPort: 80}
               - {name: https, protocol: TCP, port: 443, targetPort: 443}
-        kubeconfig: "{{ kubeconfig }}"
+        kubeconfig: "{{ microk8s_kubeconfig }}"
         state: present
 
     - name: Storage class microk8s-hostpath
@@ -273,7 +273,7 @@
     - name: Class local-storage
       kubernetes.core.k8s:
         apply: true
-        kubeconfig: "{{ kubeconfig }}"
+        kubeconfig: "{{ microk8s_kubeconfig }}"
         state: present
         definition:
           apiVersion: storage.k8s.io/v1

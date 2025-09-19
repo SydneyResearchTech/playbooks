@@ -14,7 +14,7 @@
 
 - name: Dex certs secret
   kubernetes.core.k8s:
-    kubeconfig: "{{ kubeconfig }}"
+    kubeconfig: "{{ microk8s_kubeconfig }}"
     state: present
     template:
       path: dex_certs_secret.yaml.j2
@@ -40,7 +40,7 @@
     chart_ref: dex/dex
     state: present
     values: "{{ lookup('ansible.builtin.template', 'dex_values.yaml.j2') | from_yaml }}"
-    kubeconfig: "{{ kubeconfig }}"
+    kubeconfig: "{{ microk8s_kubeconfig }}"
     update_repo_cache: true
 
 - name: Dex configure API server to connect to Dex
