@@ -2,6 +2,8 @@
   hosts: "{{ target|default('all') }}"
   become: true
   vars:
+    apptainer_enabled: true
+    microk8s_enabled: true
     vdi_default_target: multi-user.target
     vdi_ssh_known_hosts: []
     vdi_sync: true
@@ -39,11 +41,13 @@
 
   roles:
     - role: restek.core.apptainer
+      when: apptainer_enabled
     - role: restek.core.docker
       docker_insecure_registeries: [localhost:32000]
       docker_users: [ubuntu]
     - role: restek.core.microk8s
       microk8s_users: [ubuntu]
+      when: microk8s_enabled
     - role: restek.core.desktop
       desktop_apptainer_enabled: true
       desktop_conky_enabled: true
