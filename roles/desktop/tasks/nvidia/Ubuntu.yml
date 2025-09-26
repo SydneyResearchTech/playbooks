@@ -30,7 +30,8 @@
     verbosity: 0
 
 - name: NVIDIA and CUDA
-  when: nvidia_driver_branch
+  when:
+    - nvidia_driver_branch | length > 0
   block:
     - name: NVIDIA pre-req.
       ansible.builtin.package:
