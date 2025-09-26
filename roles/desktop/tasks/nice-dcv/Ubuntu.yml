@@ -50,6 +50,8 @@
 #   when: dkms_status_reg.stdout_lines | select('search', '^eveusb/[0-9.]+.*installed$') | list | length == 0
 
 - name: Nice dcv install usb driver
+  when:
+    - 0 > 1
   ansible.builtin.command:
     cmd: /usr/bin/dcvusbdriverinstaller --quiet
     creates: /var/lib/dkms/eveusb/1.0.0
