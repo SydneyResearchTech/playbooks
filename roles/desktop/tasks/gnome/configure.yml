@@ -48,7 +48,8 @@
         - Update dconf
 
 - name: Configure gnome environment
-  when: desktop_xdg_config_dirs or desktop_xdg_data_dirs
+  when:
+    - (desktop_xdg_config_dirs | length > 0) or (desktop_xdg_data_dirs | length > 0)
   ansible.builtin.copy:
     content: |
       {% if desktop_xdg_config_dirs %}

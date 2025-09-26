@@ -5,8 +5,9 @@
   ansible.builtin.shell:
     cmd: >-
       set -o pipefail;
-      ubuntu-drivers list --gpgpu
-      | grep '-server' || true
+      ubuntu-drivers list --gpgpu 2>/dev/null
+      | grep -v 'open' || true
+      | grep 'server' || true
       | sort -r
     executable: /bin/bash
   changed_when: false
@@ -14,7 +15,7 @@
 
 - name: Set fact NVIDIA driver
   ansible.builtin.set_fact:
-    nvidia_driver_name: "{{ drivers_reg.stdout_lines | first | default('') | split(',') | first }}"
+    nvidia_driver_name: "{{ drivers_reg.stdout_lines | first | default('nvidia-driver-580-server') | split(',') | first }}"
 
 - name: Set fact NVIDIA driver version
   ansible.builtin.set_fact:
