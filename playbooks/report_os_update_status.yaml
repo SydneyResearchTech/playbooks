@@ -1,0 +1,28 @@
+- name: Report OS update status
+  hosts: "{{ target | default('all') }}"
+  gather_facts: false
+
+  tasks:
+    - name: Query apt last event
+      ansible.builtin.stat:
+        path: /var/cache/apt/pkgcache.bin
+      register: stat_dpkg_log_reg
+
+    - name: Query update notifier
+      ansible.builtin.command:
+        cmd: /usr/lib/update-notifier/apt-check
+      changed_when: false
+      register: apt_check_reg
+
+    - name: Display last update time
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} {{ '%Y%m%d' | strftime(stat_dpkg_log_reg.stat.mtime) }}"
+
+    - name: Display package update stats
+      ansible.builtin.debug:
+        msg: >
+          {{ inventory_hostname }}
+          {{ apt_check_reg.stderr | ansible.builtin.split(';') | first }}
+          updates pending total
+          {{ (apt_check_reg.stderr | ansible.builtin.split(';'))[1] }}
+          security
