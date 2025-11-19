@@ -2,7 +2,6 @@
 # restek.core.eks_delete_cluster collection playbook
 # ansible-playbook -e "@$HOME/flux/clusters/$CLUSTER_NAME.values.yaml" restek.core.eks_delete_cluster
 # python3 -m pip install kubernetes
-#
 - name: AWS EKS delete cluster
   hosts: localhost
   become: false
@@ -14,6 +13,7 @@
     purge: false
     namespaces:
       - ack-system
+      - amazon-guardduty
       - calico-system
       - default
       - flux-system
@@ -21,6 +21,14 @@
       - kube-public
       - kube-system
       - tigera-operator
+
+  handlers:
+    - name: Delete tempfile
+      when:
+        - kubeconfig_file.path is defined
+      ansible.builtin.file:
+        path: "{{ kubeconfig_file.path }}"
+        status: absent
 
   pre_tasks:
     - name: Mandatory variables?
@@ -41,13 +49,83 @@
       changed_when: false
       register: aws_account_id_output
 
+    - name: Get EKS clusters
+      ansible.builtin.command:
+        cmd: aws eks list-clusters --profile={{ aws_profile }} --output=json
+      register: list_clusters
+      changed_when: false
+
+    - name: Get kubectl config
+      ansible.builtin.command:
+        cmd: >
+          aws eks update-kubeconfig --dry-run
+          --name={{ cluster_name }}
+          --profile={{ aws_profile }}
+          --kubeconfig=/dev/null
+      register: kubeconfig_reg
+      changed_when: false
+      ignore_errors: true
+
     - name: Set facts
       ansible.builtin.set_fact:
         account_id: "{{ aws_account_id_output.stdout }}"
         region: "{{ region_output.stdout }}"
         stack_name: eksctl-{{ cluster_name }}-cluster
+        kubeconfig: >-
+          {{ (cluster_name in (list_clusters.stdout | from_json).clusters) |
+          ternary((kubeconfig_reg.stdout | from_yaml), '') }}
 
-    - name: EFS delete
+    - name: mktemp
+      ansible.builtin.tempfile:
+        state: file
+      register: kubeconfig_file
+      notify:
+        - Delete tempfile
+    - name: Create kubeconfig file
+      ansible.builtin.copy:
+        content: "{{ kubeconfig | to_json }}"
+        dest: "{{ kubeconfig_file.path }}"
+        mode: "0600"
+
+    - name: If cluster exists
+      when:
+        - kubeconfig | length > 0
+      block:
+        - name: Get kubernetes resources
+          ansible.builtin.set_fact:
+            kuberentes_sc: "{{ query('kubernetes.core.k8s', kind='StorageClass', kubeconfig=kubeconfig_file.path) }}"
+            kubernetes_ns: "{{ query('kubernetes.core.k8s', kind='Namespace', kubeconfig=kubeconfig_file.path) }}"
+            kubernetes_pv: "{{ query('kubernetes.core.k8s', kind='PersistentVolume', kubeconfig=kubeconfig_file.path) }}"
+
+        - name: Uninstall flux
+          ansible.builtin.command:
+            cmd: >-
+              flux uninstall --silent
+              --kubeconfig='{{ kubeconfig_file.path }}'
+
+        - name: Resources require attention
+          ansible.builtin.assert:
+            fail_msg: >
+              Namespace={{ kubernetes_ns | map(attribute='metadata.name') | list | difference(namespaces) | list }}
+              PersistentVolumes={{ kubernetes_pv | map(attribute='metadata.name') | list }}
+            success_msg: >
+              Continue...
+            that:
+              - kubernetes_pv | length <= 0
+              - kubernetes_ns | map(attribute='metadata.name') | list |
+                difference(namespaces) | list | length <= 0
+
+        - name: Delete efs.csi.aws.com storage class
+          kubernetes.core.k8s:
+            api_version: storage.k8s.io/v1
+            kind: StorageClass
+            kubeconfig: "{{ kubeconfig }}"
+            name: "{{ item.metadata.name }}"
+            state: absent
+          loop: "{{ kuberentes_sc | selectattr('provisioner', 'equalto', 'efs.csi.aws.com') }}"
+
+    # aws efs describe-mount-targets --file-system-id fs-0aa729b6459886642
+    - name: Delete EFS stack
       when:
         - purge
       amazon.aws.cloudformation:
@@ -68,65 +146,28 @@
           TransitionToIA: {use_previous_value: true}
           PerformanceMode: {use_previous_value: true}
           VpcId: {use_previous_value: true}
-          SecurityGroupId: "sg-00000000000000000"
-          SubnetId1: "subnet-00000000000000000"
-          SubnetId2: "subnet-00000000000000000"
-          SubnetId3: "subnet-00000000000000000"
+          SecurityGroupId: 'AWS::NoValue'
+          SubnetId1: 'AWS::NoValue'
+          SubnetId2: 'AWS::NoValue'
+          SubnetId3: 'AWS::NoValue'
 
-    - name: EKS cluster exists?
-      ansible.builtin.command:
-        cmd: aws eks list-clusters --output json
-      register: list_clusters
-      changed_when: false
-
-    - name: EKS cluster stack?
-      amazon.aws.cloudformation_info:
-        profile: "{{ aws_profile }}"
-        stack_name: "{{ stack_name }}"
-      register: eks_stack
-    # - ansible.builtin.debug: {var: eks_stack}
-
-    - name: Delete EKS cluster
-      when: "cluster_name in (list_clusters.stdout | from_json).clusters"
+    - name: If eks cluster exists
+      when:
+        - kubeconfig | length > 0
       block:
-        - name: Get kubectl config
-          ansible.builtin.command:
-            cmd: >
-              aws eks update-kubeconfig --name {{ cluster_name }}
-              --profile {{ aws_profile }}
-              --kubeconfig /dev/null --dry-run
-          register: kubeconfig_output
-          changed_when: false
-
-        # TODO: Verify vpc_id after linting issue resolution
-        - name: Set Facts
-          ansible.builtin.set_fact:
-            kubeconfig: "{{ kubeconfig_output.stdout | from_yaml }}"
-            vpc_id: >-
-              {{ eks_stack['cloudformation'][stack_name]['stack_description']['outputs'] |
-              selectattr('output_key', 'equalto', 'VPC') |
-              map(attribute='output_value') | first }}
-
-        - name: K8s info?
-          kubernetes.core.k8s_info:
-            kind: Namespace
-            kubeconfig: "{{ kubeconfig }}"
-          register: k8s_info_reg
-        # - ansible.builtin.debug: {var: k8s_info_reg}
-        # - ansible.builtin.debug: {var: k8s_info_reg.resources | map(attribute='metadata.name') | list}
-
-        - name: Guardduty agent?
+        - name: Get eks addons
           ansible.builtin.command:
             cmd: >-
               aws eks list-addons
               --cluster-name {{ cluster_name }}
               --profile {{ aws_profile }}
               --output json
-          register: addons_list
+          register: addons_list_reg
           changed_when: false
 
         - name: Delete addon aws-guardduty-agent
-          when: "'aws-guardduty-agent' in (addons_list.stdout | from_json).addons"
+          when:
+            - "'aws-guardduty-agent' in (addons_list_reg.stdout | from_json).addons"
           ansible.builtin.command:
             cmd: >-
               aws eks delete-addon
@@ -137,13 +178,32 @@
           register: guardduty_agent
           changed_when: "(guardduty_agent.stdout | from_json).addon.status == 'DELETING'"
 
+    - name: Get eks stack info
+      amazon.aws.cloudformation_info:
+        profile: "{{ aws_profile }}"
+        stack_name: "{{ stack_name }}"
+      register: eks_stack_reg
+      ignore_errors: true
+
+    - name: If eks stack exists
+      when:
+        - not eks_stack_reg.failed
+        - eks_stack_reg.cloudformation | length > 0
+      block:
+        - name: Set facts
+          ansible.builtin.set_fact:
+            vpc_id: >-
+              {{ eks_stack_reg['cloudformation'][stack_name]['stack_description']['outputs'] |
+              selectattr('output_key', 'equalto', 'VPC') |
+              map(attribute='output_value') | first }}
+
         # GuardDuty
         # aws ec2 delete-vpc-endpoints --vpc-endpoint-ids vpce-#################
         # aws ec2 describe-security-groups \
         # --filters Name=tag:GuardDutyManaged,Values=true Name=vpc-id,Values=vpc-################# \
         # --query 'SecurityGroups[].GroupId' --output text \
         # |xargs -n1 aws ec2 delete-security-group --group-id
-        - name: GuardDuty VPC endpoint?
+        - name: Get GuardDuty VPC endpoint
           amazon.aws.ec2_vpc_endpoint_info:
             filters:
               "tag:GuardDutyManaged": true
@@ -152,7 +212,7 @@
           register: guardduty_vpc_endpoint
         # - ansible.builtin.debug: {var: guardduty_vpc_endpoint}
 
-        - name: GuardDuty VPC endpoint
+        - name: Delete GuardDuty VPC endpoint
           amazon.aws.ec2_vpc_endpoint:
             profile: "{{ aws_profile }}"
             state: absent
@@ -160,7 +220,18 @@
             wait: true
           loop: "{{ guardduty_vpc_endpoint.vpc_endpoints }}"
 
-        - name: GuardDuty Security Group?
+        - name: Wait for vpc endpoint delete operation
+          amazon.aws.ec2_vpc_endpoint_info:
+            filters:
+              "tag:GuardDutyManaged": true
+              vpc-id: "{{ vpc_id }}"
+            profile: "{{ aws_profile }}"
+          register: guardduty_vpc_endpoint_status
+          until: guardduty_vpc_endpoint_status.vpc_endpoints | length == 0
+          retries: 30
+          delay: 10
+
+        - name: Get GuardDuty Security Group
           amazon.aws.ec2_security_group_info:
             filters:
               "tag:GuardDutyManaged": true
@@ -169,24 +240,14 @@
           register: guardduty_security_group
         # - ansible.builtin.debug: {var: guardduty_security_group}
 
-        - name: GuardDuty Security Group
+        - name: Delete GuardDuty Security Group
           amazon.aws.ec2_security_group:
             group_id: "{{ item.group_id }}"
             profile: "{{ aws_profile }}"
             state: absent
           loop: "{{ guardduty_security_group.security_groups }}"
 
-        - name: Delete kubernetes resources
-          kubernetes.core.k8s:
-            kind: Namespace
-            kubeconfig: "{{ kubeconfig }}"
-            name: "{{ item }}"
-            state: absent
-          loop: >-
-            {{ k8s_info_reg.resources |
-            map(attribute='metadata.name') |
-            list |
-            difference(namespaces) | list }}
+        # RDS Security group "GroupName": "eks-restek-uat-vpc-rds-access"
 
         # TODO Services using the LB with public IP need to be removed before cluster deleted
 
@@ -219,7 +280,7 @@
           changed_when: false
         # - ansible.builtin.debug: {var: eks_delete}
 
-    - name: KMS key delete
+    - name: Delete KMS key
       when:
         - purge
       amazon.aws.kms_key:
@@ -227,13 +288,13 @@
         profile: "{{ aws_profile }}"
         state: absent
 
-    - name: Karpenter stack delete
+    - name: Delete karpenter stack
       amazon.aws.cloudformation:
         profile: "{{ aws_profile }}"
         stack_name: Karpenter-{{ cluster_name }}
         state: absent
 
-    - name: Flux settings delete
+    - name: Delete flux settings
       when:
         - 0 > 1
         - purge
