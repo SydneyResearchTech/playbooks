@@ -1,5 +1,6 @@
 ---
-apiVersion: kustomize.toolkit.fluxcd.io/v1beta2
+# flux/clusters/{{ cluster_name }}/infrastructure.yaml
+apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: infrastructure-controllers
@@ -23,12 +24,13 @@ spec:
     substitute:
       cluster_name: {{ cluster_name }}
       region: {{ region }}
+      aws_account_id: ""
       aws_lb_ip_address_type: dualstack
       ipFamilies: IPv6
   patches:
     []
 ---
-apiVersion: kustomize.toolkit.fluxcd.io/v1beta2
+apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: infrastructure
@@ -70,3 +72,16 @@ spec:
   #     kind: DBSubnetGroup
   #     name: db-subnet-group
   #     namespace: postgres
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: gateway-api-crds
+  namespace: flux-system
+spec:
+  interval: 10m0s
+  path: ./clusters/base
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system

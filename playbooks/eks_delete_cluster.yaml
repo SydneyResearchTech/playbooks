@@ -28,7 +28,7 @@
         - kubeconfig_file.path is defined
       ansible.builtin.file:
         path: "{{ kubeconfig_file.path }}"
-        status: absent
+        state: absent
 
   pre_tasks:
     - name: Mandatory variables?
@@ -75,7 +75,7 @@
           {{ (cluster_name in (list_clusters.stdout | from_json).clusters) |
           ternary((kubeconfig_reg.stdout | from_yaml), '') }}
 
-    - name: mktemp
+    - name: Register temp kubeconfig file
       ansible.builtin.tempfile:
         state: file
       register: kubeconfig_file
@@ -102,6 +102,7 @@
             cmd: >-
               flux uninstall --silent
               --kubeconfig='{{ kubeconfig_file.path }}'
+          changed_when: true
 
         - name: Resources require attention
           ansible.builtin.assert:
@@ -125,6 +126,7 @@
           loop: "{{ kuberentes_sc | selectattr('provisioner', 'equalto', 'efs.csi.aws.com') }}"
 
     # aws efs describe-mount-targets --file-system-id fs-0aa729b6459886642
+    # cannot be deleted because it has mount targets. You must delete the mount targets, and then try again.
     - name: Delete EFS stack
       when:
         - purge
@@ -184,6 +186,7 @@
         stack_name: "{{ stack_name }}"
       register: eks_stack_reg
       ignore_errors: true
+    # - ansible.builtin.debug: {var: eks_stack_reg}
 
     - name: If eks stack exists
       when:
